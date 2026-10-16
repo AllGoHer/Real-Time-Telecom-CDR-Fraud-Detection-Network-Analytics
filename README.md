@@ -8,7 +8,8 @@ CDR → Kafka (KRaft) → Flink (PyFlink) → Alertas en tiempo real
 
 ## 🚀 Estado del Proyecto
 - [x] Fase 1: Configuración del entorno (Docker, Git, WSL2)
-- [ ] Fase 2: Kafka KRaft y generación de CDRs sintéticos
+- [x] Fase 2: Kafka KRaft y generación de CDRs sintéticos ✅
+- [ ] Fase 3: PyFlink: Ingesta a capa Bronce (MinIO + Iceberg)
 - [ ] Fase 3: Procesamiento en tiempo real con PyFlink
 - [ ] Fase 4: Detección de fraude por ventanas temporales
 - [ ] Fase 5: Lakehouse con MinIO + Iceberg + PySpark
