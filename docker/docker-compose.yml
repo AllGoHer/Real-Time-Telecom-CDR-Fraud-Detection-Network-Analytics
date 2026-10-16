@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  kafka:
+    image: apache/kafka:3.8.0
+    container_name: kafka-cdr
+    ports:
+      - "9092:9092"
+    environment:
+      # Habilitar modo KRaft (sin ZooKeeper)
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      # Definir el votante del controller (id@host:puerto)
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      # Listeners: uno para clientes externos (9092) y otro para el controller interno (9093)
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      # Optimizaciones para entorno de desarrollo/pruebas
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      # Formato de logs para mejor depuración si algo falla
+      KAFKA_LOG4J_LOGGERS: "kafka.controller=INFO,kafka.producer.async.DefaultEventHandler=INFO,state.change.logger=INFO"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    networks:
+      - telecom-network
+
+volumes:
+  kafka_data:
+
+networks:
+  telecom-network:
+    driver: bridge
