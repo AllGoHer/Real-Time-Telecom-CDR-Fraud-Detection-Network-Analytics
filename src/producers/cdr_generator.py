@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from kafka import KafkaProducer
 
 # Configuración del productor
-KAFKA_BOOTSTRAP_SERVERS = ['localhost:9092']
+KAFKA_BOOTSTRAP_SERVERS = ['localhost:9094']
 TOPIC_NAME = 'cdr_events'
 
 # Inicializar el productor (enviamos datos como strings JSON)
