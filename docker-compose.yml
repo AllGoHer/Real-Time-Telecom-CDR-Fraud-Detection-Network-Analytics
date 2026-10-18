@@ -74,9 +74,27 @@ services:
     networks:
       - telecom-network
 
+  grafana:
+    image: grafana/grafana:10.4.2
+    container_name: grafana-fraud
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - postgres
+    networks:
+      - telecom-network
+
 volumes:
   kafka_data:
   postgres_data:
+  grafana_data:
 
 networks:
   telecom-network:
