@@ -3,15 +3,13 @@ services:
     image: apache/kafka:3.8.0
     container_name: kafka-cdr
     ports:
-      - "9092:9092"   # Para clientes internos (Flink en Docker)
-      - "9094:9094"   # Para clientes externos (Python en Windows)
+      - "9092:9092"
+      - "9094:9094"
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
-      # Tres listeners: interno, controller y externo (host)
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,PLAINTEXT_HOST://0.0.0.0:9094
-      # Dos advertised listeners: uno para Docker, otro para Windows
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9094
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
@@ -22,7 +20,7 @@ services:
     volumes:
       - kafka_data:/var/lib/kafka/data
     networks:
-      - telecom-network 
+      - telecom-network
 
   flink-jobmanager:
     build:
@@ -37,7 +35,7 @@ services:
         FLINK_PROPERTIES=
         jobmanager.rpc.address: flink-jobmanager
     volumes:
-      - flink_data:/tmp/iceberg_warehouse
+      - ./data/bronze_data:/tmp/bronze_data
       - ./src/flink_jobs:/opt/flink/jobs
     networks:
       - telecom-network
@@ -56,14 +54,29 @@ services:
         jobmanager.rpc.address: flink-jobmanager
         taskmanager.numberOfTaskSlots: 2
     volumes:
-      - flink_data:/tmp/iceberg_warehouse
+      - ./data/bronze_data:/tmp/bronze_data
       - ./src/flink_jobs:/opt/flink/jobs
+    networks:
+      - telecom-network
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres-fraud
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: fraud_user
+      POSTGRES_PASSWORD: fraud_password
+      POSTGRES_DB: fraud_detection
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init_postgres.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - telecom-network
 
 volumes:
   kafka_data:
-  flink_data:
+  postgres_data:
 
 networks:
   telecom-network:

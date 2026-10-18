@@ -32,7 +32,7 @@ def generate_cdr():
         "callee": f"{prefix}{random.randint(700000000, 799999999)}",
         "duration_sec": duration,
         "country_code": country,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
         "is_suspicious": is_fraud  # Etiqueta oculta para validar nuestro detector de fraude después
     }
 
