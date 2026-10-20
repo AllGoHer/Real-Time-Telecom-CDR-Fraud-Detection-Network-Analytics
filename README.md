@@ -82,13 +82,13 @@ ________________________________________________________________________________
 ✅ 100% containerizado con Docker Compose
 
 __________________________________________________________________________________________________________________________________________________________________________________________________
-## 🏗️ Arquitectura
+## 🏗️ Arquitectura del Proyecto
 
 Diagrama de Flujo de Datos
 
 ![image](https://github.com/user-attachments/assets/f20293d1-1448-4464-9703-170675b68539)
 
-## 🏗️ Arquitectura del Proyecto
+
 
 
 
@@ -149,7 +149,19 @@ graph LR
     style Shared_Volume fill:#fce4ec,stroke:#c2185b,stroke-width:2px
 ```
 
+### 🛠️ Stack Tecnológico por Proceso
 
+**1. GENERACIÓN DE DATOS (Windows Host)**
+
+| Componente | Tecnología | Versión | Ubicación |
+|------------|------------|---------|-----------|
+| Lenguaje | Python | 3.11+ | Local (Windows) |
+| Librería Kafka | kafka-python-ng | 2.2.2 | src/producers/requirements.txt |
+| Script | cdr_generator.py | - | src/producers/ |
+| Conexión | Kafka Bootstrap | localhost:9094 | Multi-listener externo |
+
+
+**Propósito:** Simular tráfico real de telecomunicaciones generando CDRs (Call Detail Records) cada 0.5 segundos con 10% de probabilidad de fraude.
 
 ______________________________________________________________________________________________________________________
 ## Arquitectura Medallón
