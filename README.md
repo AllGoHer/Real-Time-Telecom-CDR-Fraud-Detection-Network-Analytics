@@ -89,8 +89,8 @@ Diagrama de Flujo de Datos
 ![image](https://github.com/user-attachments/assets/f20293d1-1448-4464-9703-170675b68539)
 
 
-
-__________________________________________________________________________________________________________________________________________________________________________________________________
+____________________________________________________________________________________________________________________________________________________________________________________________________________________________
+____________________________________________________________________________________________________________________________________________________________________________________________________________________________
 
 ```mermaid
 graph LR
@@ -181,46 +181,101 @@ ________________________________________________________________________________
 
 ## 📁 Estructura del Proyecto
 
-telecom-cdr-fraud-detection/
-├── 📄 README.md                          # Este archivo
-├── 📄 docker-compose.yml                 # Orquestación de servicios
-├── 📄 Dockerfile.flink                   # Imagen personalizada de Flink
-├── 📄 .gitignore                         # Archivos ignorados
-│
-├── 📁 data/                              # Datos generados (no commiteados)
-│   ├── bronze_data/                      # Capa Bronce (JSON)
-│   └── silver_data/                      # Capa Plata (Parquet)
-│
-── 📁 src/
-│   ├── 📁 producers/
-│   │   ├── cdr_generator.py              # Generador de CDRs sintéticos
-│   │   └── requirements.txt              # Dependencias Python
-│   │
-│   ├── 📁 flink_jobs/
-│   │   ├── bronze_ingestion.py           # Job: Kafka → Bronze Layer
-│   │   └── gold_layer.py                 # Job: Kafka → Gold Layer (PostgreSQL)
-│   │
-│   └── 📁 spark_jobs/
-│       └── silver_layer.py               # Script: Bronze → Silver (Polars)
-│
-├── 📁 scripts/
-│   ├── init_postgres.sql                 # Esquema de base de datos
-│   └── kafka-tools.ps1                   # Utilidades de Kafka
-│
-├── 📁 docker/
-│   ── 📁 grafana/
-│       └── 📁 provisioning/
-│           └── 📁 datasources/
-│               └── datasource.yml        # Configuración automática de Grafana
-│
-└── 📁 docs/
-    ├── ARCHITECTURE.md                   # Documentación arquitectónica
-    ├── DECISIONS.md                      # Decisiones técnicas
-    └── TROUBLESHOOTING.md                # Guía de resolución de problemas
-
 
 ![image](https://github.com/user-attachments/assets/8ce4c1c8-db8f-45f8-9ea4-e541234cc402)
- 
+
+____________________________________________________________________________________________________________________________________________________________________________________________________________________________
+
+## 🎯 Decisiones Arquitectónicas Clave
+
+**1. Multi-Listener en Kafka**
+
+* **Problema:** Conflictos de red entre Docker (Flink) y Windows (Python).
+
+* **Solución:** Dos listeners: kafka:9092 (interno) y localhost:9094 (externo).
+  
+**2. JSON en Capa Bronce (no Parquet)**
+
+* **Problema:** Dependency Hell de Hadoop con Parquet en Flink.
+
+* **Solución:** JSON nativo en Flink, Parquet se deja para Capa Plata con Polars.
+  
+**3. Polars en lugar de Spark**
+
+* **Problema:** Spark requiere winutils.exe en Windows
+
+* **Solución:** Polars (Rust-based) - 10x más rápido, sin dependencias Java
+
+**4. JARs en /opt/flink/lib/ (no /opt/flink/opt/)**
+
+* **Problema:** Errores de classpath con PyFlink.
+  
+* **Solución:** Carga global garantizada desde /lib/
+
+**5. Checkpointing cada 10 segundos**
+
+* **Problema:** Archivos .inprogress nunca se finalizan
+
+* **Solución:** Checkpointing obligatorio para semántica exactly-once
+
+**6. Volumen compartido ./data/bronze_data**
+
+* **Problema:** Datos atrapados dentro de contenedores Docker.
+  
+* **Solución:** Bind mount para acceso desde Windows (Polars) y Docker (Flink).
+
+____________________________________________________________________________________________________________________________________________________________________________________________________________________________
+
+## 📊 Métricas de Rendimiento
+
+| Métrica | Valor |
+|---------|-------|
+| Latencia end-to-end | < 60 segundos |
+| Throughput | 120+ CDRs/minuto |
+| Ventanas de tiempo | 1 minuto (Tumbling) |
+| Checkpoint interval | 10 segundos |
+| Rollling policy | 10KB / 10 segundos |
+| Actualización dashboard | 10-30 segundos |
+
+____________________________________________________________________________________________________________________________________________________________________________________________________________________________
+
+## 🚀 Comandos de Ejecución
+
+bash:
+
+        # 1. Levantar infraestructura
+        docker compose up -d
+        
+        # 2. Iniciar generador (Terminal 1)
+        python src/producers/cdr_generator.py
+        
+        # 3. Ingesta Capa Bronce (Terminal 2)
+        docker exec -it flink-jobmanager flink run -py /opt/flink/jobs/bronze_ingestion.py
+        
+        # 4. Procesamiento Capa Plata (Terminal 3)
+        python src/spark_jobs/silver_layer.py
+        
+        # 5. Detección Capa Oro (Terminal 4)
+        docker exec -it flink-jobmanager flink run -py /opt/flink/jobs/gold_layer.py
+        
+        # 6. Ver métricas en PostgreSQL
+        docker exec -it postgres-fraud psql -U fraud_user -d fraud_detection \
+          -c "SELECT * FROM fraud_metrics ORDER BY window_start DESC LIMIT 5;"
+        
+        # 7. Acceder al dashboard
+        # http://localhost:3000 (admin/admin)
+
+
+Esta arquitectura representa el estado final y definitivo del proyecto, incorporando todas las lecciones aprendidas y pivotes arquitectónicos realizados durante el desarrollo. Es una solución production-ready, escalable y completamente containerizada. 🏆
+Copy
+Ask Qwen
+Explain
+Translate(en-US)
+
+
+
+
+
 ### 🛠️ Stack Tecnológico por Proceso
 
 **1. GENERACIÓN DE DATOS (Windows Host)**
