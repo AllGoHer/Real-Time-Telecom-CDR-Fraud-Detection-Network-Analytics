@@ -90,8 +90,7 @@ Diagrama de Flujo de Datos
 
 ## 🏗️ Arquitectura del Proyecto
 
-<details>
-<summary> <b>Haz clic aquí para ver el código Mermaid de la arquitectura</b></summary>
+
 
 ```mermaid
 graph LR
