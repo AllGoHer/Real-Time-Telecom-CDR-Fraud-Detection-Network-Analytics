@@ -92,9 +92,10 @@ Diagrama de Flujo de Datos
 
 <details>
 <summary> <b>Haz clic aquí para ver el código Mermaid de la arquitectura</b></summary>
+
 ```mermaid
 graph LR
-    subgraph Windows_Host["️ Windows 11 Host"]
+    [subgraph Windows_Host["️ Windows 11 Host"]
         A[("📱 CDR Generator<br/>Python 3.11 + kafka-python-ng")]
         B[("️ Polars Batch<br/>Limpieza + Enriquecimiento")]
     end
@@ -146,7 +147,7 @@ graph LR
     style Flink_Cluster fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
     style PostgreSQL_DB fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
     style Grafana_Viz fill:#fff9c4,stroke:#fbc02d,stroke-width:2px
-    style Shared_Volume fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+    style Shared_Volume fill:#fce4ec,stroke:#c2185b,stroke-width:2px]
 ```
 
 
