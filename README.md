@@ -90,49 +90,56 @@ Diagrama de Flujo de Datos
 
 ## 🏗️ Arquitectura del Proyecto
 
+<details>
+<summary> <b>Haz clic aquí para ver el código Mermaid de la arquitectura</b></summary>
 ```mermaid
 graph LR
-    subgraph Windows_Host["Windows 11 Host"]
-        A["CDR Generator<br/>Python 3.11 + kafka-python-ng<br/>2 CDRs/seg | 10% fraude"]
-        B["Polars Batch<br/>Lazy Evaluation<br/>Limpieza + Enriquecimiento"]
+    subgraph Windows_Host["️ Windows 11 Host"]
+        A[("📱 CDR Generator<br/>Python 3.11 + kafka-python-ng")]
+        B[("️ Polars Batch<br/>Limpieza + Enriquecimiento")]
     end
 
-    subgraph Docker_Network["Docker Network telecom-network"]
-        subgraph Kafka_Cluster["Apache Kafka 3.8.0 KRaft"]
-            K["Topic: cdr_events<br/>3 Particiones<br/>Multi-listener:<br/>localhost:9094 Host<br/>kafka:9092 Docker"]
+    subgraph Docker_Network["🐳 Docker Network (telecom-network)"]
+        subgraph Kafka_Cluster["📨 Apache Kafka 3.8.0 (KRaft)"]
+            K[("📥 Topic: cdr_events<br/>3 Particiones<br/>Multi-listener:<br/>• localhost:9094 (Host)<br/>• kafka:9092 (Docker)")]
         end
 
-        subgraph Flink_Cluster["Apache Flink 1.18.1"]
-            JM["JobManager<br/>Puerto 8081 Web UI<br/>Orquestador"]
-            TM["TaskManager<br/>2 Task Slots<br/>Ejecutor real"]
+        subgraph Flink_Cluster[" Apache Flink 1.18.1"]
+            JM["🎯 JobManager<br/>Puerto 8081 (Web UI)"]
+            TM[" TaskManager<br/>2 Task Slots"]
         end
 
-        subgraph PostgreSQL_DB["PostgreSQL 15-alpine"]
-            FM["fraud_metrics<br/>Metricas agregadas<br/>por ventana"]
-            FA["fraud_alerts<br/>Alertas individuales<br/>de fraude"]
+        subgraph PostgreSQL_DB["🗄️ PostgreSQL 15-alpine"]
+            FM[("📊 fraud_metrics<br/>Métricas agregadas")]
+            FA[(" fraud_alerts<br/>Alertas individuales")]
         end
 
-        subgraph Grafana_Viz["Grafana 10.4.2"]
-            GD["Dashboard 360<br/>Auto-provisioned<br/>3 Paneles:<br/>Tasa de Fraude<br/>Volumen<br/>Tabla metricas"]
+        subgraph Grafana_Viz["📊 Grafana 10.4.2"]
+            GD["🖥️ Dashboard 360°<br/>Auto-provisioned<br/>3 Paneles:<br/>• Tasa de Fraude<br/>• Volumen<br/>• Tabla métricas"]
         end
     end
 
-    subgraph Shared_Volume["Shared Volume ./data"]
-        BL["Bronze Layer<br/>JSON crudo<br/>Checkpoint: 10s<br/>Rolling: 10KB/10s<br/>Append-only"]
-        SL["Silver Layer<br/>Parquet columnar<br/>Particionado: country_code<br/>Enriquecido"]
+    subgraph Shared_Volume["📁 Shared Volume (./data)"]
+        BL[("🥉 Bronze Layer<br/>JSON crudo<br/>Checkpoint: 10s<br/>Rolling: 10KB/10s")]
+        SL[("🥈 Silver Layer<br/>Parquet columnar<br/>Particionado: country_code")]
     end
 
-    A -->|"JSON localhost:9094 2 CDRs/seg"| K
-    K -->|"kafka:9092 latest-offset JSON format"| JM
-    JM -->|"RPC Coordinacion"| TM
-    TM -->|"PyFlink Filesystem Sink Checkpoint 10s JSON files"| BL
-    BL -->|"Polars scan_ndjson Lazy Evaluation Batch processing"| B
-    B -->|"write_parquet Enriquecido duration_minutes call_type is_international"| SL
-    TM -->|"PyFlink SQL Tumbling Windows 1 minuto Watermark: 5s JDBC Upserts"| FM
-    FM -->|"Relacion 1:N"| FA
-    FM -->|"SQL Queries timeFilter Refresh: 30s"| GD
-    FA -->|"SQL Queries timeFilter Refresh: 30s"| GD
+    %% Flujo de datos
+    A -->|"JSON<br/>localhost:9094<br/>2 CDRs/seg"| K
+    K -->|"kafka:9092<br/>latest-offset"| JM
+    JM --> TM
+    
+    TM -->|"PyFlink<br/>Filesystem Sink<br/>Checkpoint 10s"| BL
+    BL -->|"Polars<br/>Lazy Evaluation<br/>scan_ndjson()"| B
+    B -->|"write_parquet()<br/>Enriquecido"| SL
+    
+    TM -->|"PyFlink SQL<br/>Tumbling Windows<br/>1 minuto<br/>Watermark: 5s"| FM
+    FM --> FA
+    
+    FM -->|"SQL Queries<br/>$__timeFilter"| GD
+    FA -->|"SQL Queries<br/>$__timeFilter"| GD
 
+    %% Estilos
     style Windows_Host fill:#e1f5ff,stroke:#0288d1,stroke-width:2px
     style Docker_Network fill:#fff3e0,stroke:#f57c00,stroke-width:2px
     style Kafka_Cluster fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
@@ -141,6 +148,8 @@ graph LR
     style Grafana_Viz fill:#fff9c4,stroke:#fbc02d,stroke-width:2px
     style Shared_Volume fill:#fce4ec,stroke:#c2185b,stroke-width:2px
 ```
+
+
 
 ______________________________________________________________________________________________________________________
 ## Arquitectura Medallón
