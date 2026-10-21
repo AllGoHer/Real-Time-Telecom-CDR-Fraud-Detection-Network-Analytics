@@ -196,7 +196,7 @@ Prerrequisitos:
 bash:
 
         # 1. Clonar el repositorio
-        git clone https://github.com/AllGoHer/Real-Time-telecom-cdr-fraud-detection.git
+        git clone https://github.com/AllGoHer/Real-Time-Telecom-CDR-Fraud-Detection-Network-Analytics
         cd telecom-cdr-fraud-detection
         
         # 2. Crear entorno virtual e instalar dependencias
