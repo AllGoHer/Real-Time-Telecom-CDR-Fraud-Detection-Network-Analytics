@@ -185,6 +185,49 @@ ________________________________________________________________________________
 ![image](https://github.com/user-attachments/assets/8ce4c1c8-db8f-45f8-9ea4-e541234cc402)
 
 ____________________________________________________________________________________________________________________________________________________________________________________________________________________________
+## 🚀 Quick Start
+
+Prerrequisitos:
+
+* Windows 11 con WSL2 habilitado.
+
+* Docker Desktop (mínimo 8GB RAM, 4 CPUs).
+
+* Python 3.11+
+
+* Git
+
+
+**Instalación en 5 Minutos.**
+
+bash:
+
+        # 1. Clonar el repositorio
+        git clone https://github.com/tu-usuario/telecom-cdr-fraud-detection.git
+        cd telecom-cdr-fraud-detection
+        
+        # 2. Crear entorno virtual e instalar dependencias
+        python -m venv venv
+        .\venv\Scripts\Activate
+        pip install -r src/producers/requirements.txt
+        pip install polars
+        
+        # 3. Levantar infraestructura (Kafka, Flink, PostgreSQL, Grafana)
+        docker compose up -d
+        
+        # 4. Crear tópico de Kafka
+        docker exec -it kafka-cdr /opt/kafka/bin/kafka-topics.sh \
+          --create --topic cdr_events \
+          --bootstrap-server localhost:9092 \
+          --partitions 3 --replication-factor 1
+        
+        # 5. Verificar servicios
+        docker compose ps
+
+
+
+
+
 
 ## 🎯 Decisiones Arquitectónicas Clave
 
