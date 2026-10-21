@@ -47,42 +47,36 @@
 **Solución:** Habilitar el checkpointing en la configuración del TableEnvironment de PyFlink: `t_env.get_config().get_configuration().set_string('execution.checkpointing.interval', '10s')`.
 
 
-
-
-
-## FASE 4: Capa Plata y Capa Oro
-
-### Problema 4.1: `UnsatisfiedLinkError` y falta de `winutils.exe` en PySpark (Windows)
+### Problema: `UnsatisfiedLinkError` y falta de `winutils.exe` en PySpark (Windows)
 **Síntoma:** Al ejecutar PySpark localmente en Windows, falla con `java.lang.UnsatisfiedLinkError: 'boolean org.apache.hadoop.io.nativeio.NativeIO$Windows.access0...'`.  
 **Causa:** Spark depende de librerías nativas de Hadoop (`winutils.exe` y `hadoop.dll`) para interactuar con el sistema de archivos de Windows. Configurar esto manualmente es propenso a errores, especialmente con versiones modernas de Java (21+) que tienen restricciones de seguridad más estrictas.  
 **Solución (Decisión Arquitectónica):** Se reemplazó PySpark por la librería **Polars** para el procesamiento de la Capa Plata en el entorno de desarrollo local. Polars es nativo de Rust/Python, no tiene dependencias de Java/Hadoop, es significativamente más rápido para volúmenes de datos locales y escribe archivos Parquet de forma nativa, eliminando la complejidad innecesaria sin sacrificar la lógica de transformación.
 
-### Problema 4.2: Docker falla al descargar imágenes de Spark (`not found`)
+### Problema: Docker falla al descargar imágenes de Spark (`not found`)
 **Síntoma:** `docker compose up` falla con `failed to resolve reference "docker.io/bitnami/spark:3.5.3": not found`.  
 **Causa:** Bloqueos de red, rate limits de Docker Hub o cambios en las etiquetas de las imágenes en el registro.  
 **Solución:** Dado que ya se adoptó Polars para el procesamiento local (Problema 4.1), se eliminaron por completo los servicios `spark-master` y `spark-worker` del archivo `docker-compose.yml`, simplificando la arquitectura y eliminando este punto de fallo.
 
-### Problema 4.3: Flink no encuentra el conector JDBC (`Could not find any factory for identifier 'jdbc'`)
+### Problema: Flink no encuentra el conector JDBC (`Could not find any factory for identifier 'jdbc'`)
 **Síntoma:** El job de Flink falla al crear la tabla destino en PostgreSQL con el error `Cannot discover a connector using option: 'connector'='jdbc'`.  
 **Causa:** Combinación de dos errores:  
 1. El nombre del artifact en Maven es `flink-connector-jdbc`, no `flink-sql-connector-jdbc` (error 404 en `wget`).  
 2. Los archivos JAR descargados se colocaron en `/opt/flink/opt/`, pero PyFlink requiere que los conectores estén en `/opt/flink/lib/` para que el classloader global los cargue correctamente.  
 **Solución:** Se corrigió la URL en el `Dockerfile.flink` a `flink-connector-jdbc-3.1.2-1.18.jar` y se modificó la ruta de destino de todos los `wget` a `/opt/flink/lib/`.
 
-### Problema 4.4: Flink SQL Parser Exception con la columna "timestamp"
+### Problema: Flink SQL Parser Exception con la columna "timestamp"
 **Síntoma:** `SqlParserException: Encountered "timestamp" at line 8, column 13.`  
 **Causa:** `timestamp` es una palabra reservada en SQL (y en Flink SQL). Usarla como nombre de columna sin escapar provoca un error de sintaxis en el parser de Calcite/Flink.  
 **Solución:** Envolver el nombre de la columna en backticks (`` `timestamp` ``) en la definición de la tabla de Flink SQL para indicar que es un identificador literal que coincide con la clave del JSON.
 
-### Problema 4.5: Job de Flink en estado `RESTARTING` y 0 filas en PostgreSQL
+### Problema: Job de Flink en estado `RESTARTING` y 0 filas en PostgreSQL
 **Síntoma:** El job de Flink aparece como `RUNNING` momentáneamente pero entra en un bucle de `RESTARTING`, y la tabla `fraud_metrics` en PostgreSQL permanece vacía (`0 rows`).  
 **Causa:** El generador de Python enviaba fechas en formato ISO 8601 con zona horaria (`2026-10-17T00:18:04.139742+00:00`). La función `TO_TIMESTAMP` de Flink fallaba al parsear este formato complejo, devolviendo `NULL` en la columna `event_time`. Si `event_time` es `NULL`, el **Watermark** nunca avanza. Si el Watermark no avanza, la **Tumbling Window** (ventana de 1 minuto) nunca se considera "cerrada" y Flink nunca dispara la escritura hacia el sink de PostgreSQL.  
 **Solución:** Se modificó el generador de Python (`cdr_generator.py`) para emitir fechas en un formato simple y universalmente compatible: `YYYY-MM-DD HH:MM:SS`, utilizando `datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")`. Esto permitió que `TO_TIMESTAMP` funcionara, el Watermark avanzara y las ventanas se cerraran y escribieran correctamente.
 
 
-## FASE 5: Dashboard en Tiempo Real (Grafana)
 
-### Problema 5.1: Grafana no muestra datos ("No data")
+### Problema: Grafana no muestra datos ("No data")
 **Síntoma:** El panel de Grafana está vacío a pesar de que PostgreSQL tiene registros.
 **Causa:** 
 1. El rango de tiempo seleccionado en Grafana (ej. "Last 5 minutes") no coincide con la hora de los datos en PostgreSQL.
@@ -90,12 +84,12 @@
 3. Desajuste de zonas horarias entre la JVM de Flink y el navegador web.
 **Solución:** Asegurarse de que el generador y Flink estén corriendo. Expandir el rango de tiempo en Grafana a "Last 1 hour" para verificar la presencia de datos. Usar las macros nativas de Grafana (`$__timeFilter(window_start)`) en las consultas SQL para que el filtrado de tiempo se maneje automáticamente.
 
-### Problema 5.2: Error de conexión al Data Source de PostgreSQL
+### Problema: Error de conexión al Data Source de PostgreSQL
 **Síntoma:** Grafana no puede conectarse a la base de datos.
 **Causa:** Intentar conectar usando `localhost:5432` desde dentro del contenedor de Grafana. En Docker, `localhost` se refiere al propio contenedor de Grafana.
 **Solución:** Utilizar el nombre del servicio de Docker Compose (`postgres-fraud:5432`) en la configuración del Data Source. Además, se implementó *Provisioning* mediante un archivo `datasource.yml` montado en el contenedor, eliminando la necesidad de configuración manual y garantizando la reproducibilidad del entorno.
 
-### Problema 5.3: Conflicto de puerto 3000
+### Problema: Conflicto de puerto 3000
 **Síntoma:** Docker falla al iniciar Grafana porque el puerto 3000 ya está en uso.
 **Causa:** Otra aplicación local (como React, Node.js o otro servicio) ya está escuchando en el puerto 3000.
 **Solución:** Cambiar el mapeo de puertos en `docker-compose.yml` de `"3000:3000"` a `"3001:3000"` y acceder a Grafana mediante `http://localhost:3001`.
