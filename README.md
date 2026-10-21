@@ -226,9 +226,158 @@ bash:
 
 
 
+Ejecución del Pipeline Completo
 
 
+bash:
 
+        # Terminal 1: Iniciar generador de datos
+        python src/producers/cdr_generator.py
+        
+        # Terminal 2: Ingesta a Capa Bronce (Flink)
+        docker exec -it flink-jobmanager flink run -py /opt/flink/jobs/bronze_ingestion.py
+        
+        # Terminal 3: Procesamiento Capa Plata (Polars)
+        python src/spark_jobs/silver_layer.py
+        
+        # Terminal 4: Detección de Fraude Capa Oro (Flink)
+        docker exec -it flink-jobmanager flink run -py /opt/flink/jobs/gold_layer.py
+        
+        # Terminal 5: Ver métricas en PostgreSQL
+        docker exec -it postgres-fraud psql -U fraud_user -d fraud_detection \
+          -c "SELECT * FROM fraud_metrics ORDER BY window_start DESC LIMIT 5;"
+
+___________________________________________________________________________________________________________________________________________________________________________________________________________________________
+
+### **Acceder al Dashboard**
+
+1. Abre tu navegador en http://localhost:3000
+
+2. Credenciales: admin / admin
+
+3. El dashboard se carga automáticamente con 3 paneles:
+
+📊 Tasa de Fraude por País (%)
+
+📞 Volumen de Llamadas por País
+
+📋 Detalle de Métricas en Tiempo Real
+
+____________________________________________________________________________________________________________________________________________________________________________________________________________________________
+
+### 📊 Resultados en Vivo
+
+**History Telling: 22 Minutos de Operación en Tiempo Real**
+
+**🎬 Capítulo 1: El Despertar del Sistema (01:51:00)**
+
+"Son las 1:51 AM del 18 de octubre de 2026. Nuestro sistema acaba de activarse."
+
+En los primeros minutos de operación, el dashboard revela un panorama preocupante:
+
+* 🇧🇷 Brasil lidera las alertas con un 29% de tasa de fraude - la más alta de todos los países.
+
+* 🇫🇷 Francia le sigue con 24%, mostrando patrones sospechosos consistentes.
+
+* 🇸 Estados Unidos presenta 15% de llamadas fraudulentas.
+
+* 🇬🇧 Reino Unido aparece limpio por ahora (0%).
+  
+**Volumen total procesado:** 1,022 llamadas en el primer minuto
+
+**💡 Insight:** En menos de 60 segundos, identificamos que Brasil y Francia son los puntos calientes de actividad fraudulenta.
+
+____________________________________________________________________________________________________________________________________________________________________________________________________________________________
+
+**🎬 Capítulo 2: La Tormenta se Calma (01:57:00)**
+
+"Seis minutos después, el panorama cambia drásticamente."
+
+* 🇧🇷 Brasil cae del 29% al 6% - reducción del 79% en tasa de fraude.
+
+* 🇫🇷 Francia se limpia completamente - 0% de fraude detectado.
+  
+* 🇪 Alemania emerge como nuevo foco con 21% de llamadas sospechosas.
+  
+**Volumen total:** 1,063 llamadas procesadas.
+
+🔍**Patrón detectado:** Los fraudadores están rotando entre países. Cuando un país se "calienta", el sistema lo detecta y ellos migran.
+
+____________________________________________________________________________________________________________________________________________________________________________________________________________________________
+**Capítulo 3: El Juego del Gato y el Ratón (02:02:00)**
+
+**"11 minutos de operación. Los patrones se vuelven más sofisticados."**
+
+* 🇧🇷 Brasil vuelve a subir al 23% - los atacantes regresaron.
+  
+* 🇺🇸 Estados Unidos se mantiene estable en 20%.
+  
+* 🇫🇷 Francia se mantiene limpio (10% leve).
+  
+**Observación crítica:** El volumen de llamadas sospechosas se mantiene constante (~8-10 por país), pero el volumen total varía. Esto sugiere que los fraudadores están usando bots automatizados que adaptan su frecuencia según la detección.
+
+____________________________________________________________________________________________________________________________________________________________________________________________________________________________
+**🎬 Capítulo 4: La Hora Crítica (02:09:00)**
+
+**"18 minutos. El sistema ha procesado más de 1,500 llamadas."**
+
+* 🇳🇬 Nigeria emerge con 16% de fraude - un nuevo actor en el juego.
+  
+* 🇸 Estados Unidos se mantiene en 18%.
+  
+* 🇪🇸 España aparece limpio con solo 5%.
+  
+🚨 **Alerta de patrón:** Los países con mayor volumen total de llamadas tienen tasas de fraude moderadas. El fraude no es aleatorio - está dirigido estratégicamente.
+
+____________________________________________________________________________________________________________________________________________________________________________________________________________________________
+**🎬 Capítulo 5: La Estabilización (02:13:00)**
+
+**"22 minutos de operación continua. El sistema ha madurado."**
+
+* 🇧 Reino Unido lidera el volumen con 25 llamadas pero solo 12% de fraude.
+  
+* 🇫🇷 Francia tiene el mayor volumen (28) con 11% de fraude - eficiencia operativa.
+  
+* 🇳🇬 Nigeria se limpia completamente (0% de fraude).
+
+  
+📊 **Métricas consolidadas del período:**
+
+* Total de llamadas procesadas: ~1,800.
+
+* Tasa de fraude promedio global: 12.4%.
+
+* País más atacado: Brasil (picos de 29%).
+
+* País más resiliente: Nigeria (de 16% a 0% en 4 minutos).
+
+
+____________________________________________________________________________________________________________________________________________________________________________________________________________________________
+
+### 📸 Capturas del Dashboard
+
+<div align="center">
+
+**Dashboard en Tiempo Real - Vista General**
+
+![image](https://github.com/user-attachments/assets/6da26069-73cb-4e02-868b-d0379eb99b3a)
+
+
+**Panel 1: Tasa de Fraude por País (%) - Gráfico de series temporales**
+
+![image](https://github.com/user-attachments/assets/407a2a72-dee7-4dac-b65c-17bd51bab73a)
+
+**Panel 2: Volumen de Llamadas por País - Gráfico de barras**
+
+![image](https://github.com/user-attachments/assets/044dc346-fa7a-4ecd-ab25-f6ed3f2c2c75)
+
+**Panel 3: Detalle de Métricas - Tabla en tiempo real**
+
+![image](https://github.com/user-attachments/assets/de443b07-2e39-4487-9653-b4c43c6d61f3)
+
+</div>
+
+____________________________________________________________________________________________________________________________________________________________________________________________________________________________
 ## 🎯 Decisiones Arquitectónicas Clave
 
 **1. Multi-Listener en Kafka**
