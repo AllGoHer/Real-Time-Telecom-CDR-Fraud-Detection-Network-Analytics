@@ -1,0 +1,19 @@
+FROM flink:1.18.1-scala_2.12-java11
+
+# 1. Instalar Python, pip y wget
+RUN apt-get update && \
+    apt-get install -y python3 python3-pip wget && \
+    rm -rf /var/lib/apt/lists/*
+
+# 2. Crear enlace simbólico para que 'python' funcione
+RUN ln -s /usr/bin/python3 /usr/bin/python
+
+# 3. Instalar PyFlink
+RUN pip3 install --no-cache-dir apache-flink==1.18.1
+
+# 4. Descargar TODOS los conectores en la carpeta /opt/flink/lib/ (Carga global garantizada)
+RUN wget -q -P /opt/flink/lib/ https://repo1.maven.org/maven2/org/apache/flink/flink-sql-connector-kafka/3.0.1-1.18/flink-sql-connector-kafka-3.0.1-1.18.jar
+
+RUN wget -q -P /opt/flink/lib/ https://repo1.maven.org/maven2/org/apache/flink/flink-connector-jdbc/3.1.2-1.18/flink-connector-jdbc-3.1.2-1.18.jar
+
+RUN wget -q -P /opt/flink/lib/ https://repo1.maven.org/maven2/org/postgresql/postgresql/42.6.0/postgresql-42.6.0.jar
