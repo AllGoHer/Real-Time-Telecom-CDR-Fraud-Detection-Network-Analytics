@@ -1,0 +1,71 @@
+SENTINELSTREAM — EXPERIMENTO V11
+================================
+Dataset: cdr_experiment_v10.parquet (datos sintéticos)
+Semilla: 42
+IsolationForest: 300 estimadores; contamination=0.05
+Partición por llamante: 300 entrenamiento / 100 calibración / 100 prueba
+La novedad del destino usa solo eventos previos dentro de las 24 horas.
+El umbral se selecciona únicamente en calibración.
+
+AUDITORÍA DE LA CARACTERÍSTICA NUEVA
+shape: (2, 3)
+┌────────────────┬───────┬──────────────────────┐
+│ is_burst_event ┆ calls ┆ new_destination_rate │
+│ ---            ┆ ---   ┆ ---                  │
+│ bool           ┆ u32   ┆ f64                  │
+╞════════════════╪═══════╪══════════════════════╡
+│ false          ┆ 8689  ┆ 0.910116             │
+│ true           ┆ 1311  ┆ 0.984744             │
+└────────────────┴───────┴──────────────────────┘
+
+MODELO BASE (4 características)
+Modelo: baseline
+Características: prior_calls_1m, prior_calls_5m, prior_calls_15m, prior_unique_destinations_24h
+Umbral seleccionado en calibración: -0.02356832
+F1 calibración: 0.9469
+Precisión calibración: 0.9727
+Llamadas de prueba: 2000
+Llamantes de prueba: 100
+Positivos reales: 384
+Predicciones positivas: 368
+TN=1603 FP=13 FN=29 TP=355
+Accuracy: 0.9790
+Precision: 0.9647
+Recall: 0.9245
+F1: 0.9441
+PR-AUC (Average Precision): 0.8973
+ROC-AUC: 0.9609
+
+MODELO AMPLIADO (5 características)
+Modelo: enhanced
+Características: prior_calls_1m, prior_calls_5m, prior_calls_15m, prior_unique_destinations_24h, is_new_destination_24h
+Umbral seleccionado en calibración: -0.02643392
+F1 calibración: 0.9264
+Precisión calibración: 0.9304
+Llamadas de prueba: 2000
+Llamantes de prueba: 100
+Positivos reales: 384
+Predicciones positivas: 378
+TN=1593 FP=23 FN=29 TP=355
+Accuracy: 0.9740
+Precision: 0.9392
+Recall: 0.9245
+F1: 0.9318
+PR-AUC (Average Precision): 0.8604
+ROC-AUC: 0.9397
+
+DIFERENCIA (AMPLIADO - BASE)
+precision: -0.0255
+recall: +0.0000
+f1: -0.0124
+pr_auc: -0.0369
+roc_auc: -0.0212
+fp: +10.0000
+fn: +0.0000
+
+LIMITACIONES
+- Los datos y las etiquetas son sintéticos.
+- La mejora en datos sintéticos no demuestra rendimiento en producción.
+- La característica de novedad puede tener señal limitada.
+- El score de IsolationForest no es una probabilidad calibrada.
+- La serialización del modelo se realiza mediante un proceso independiente de exportación.

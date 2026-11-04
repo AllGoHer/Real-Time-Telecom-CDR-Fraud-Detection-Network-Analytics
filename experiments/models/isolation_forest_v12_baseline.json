@@ -1,0 +1,47 @@
+{
+  "model_name": "SentinelStream V12 baseline",
+  "model_version": "V12",
+  "model_type": "sklearn.ensemble.IsolationForest",
+  "features": [
+    "prior_calls_1m",
+    "prior_calls_5m",
+    "prior_calls_15m",
+    "prior_unique_destinations_24h"
+  ],
+  "threshold": 0.07884560010740427,
+  "score_definition": "-model.decision_function(X); mayor indica mayor anomalia",
+  "threshold_selection": "Maximo F1 en calibracion; desempate por precision",
+  "calibration_f1": 0.768715524034673,
+  "calibration_precision": 0.8288020390824129,
+  "test_metrics": {
+    "accuracy": 0.9883256114123891,
+    "precision": 0.8336184773310522,
+    "recall": 0.7031024531024531,
+    "f1": 0.7628180039138943,
+    "pr_auc": 0.7143468421026415,
+    "roc_auc": 0.9434451557701099
+  },
+  "confusion_matrix": {
+    "tn": 100656,
+    "fp": 389,
+    "fn": 823,
+    "tp": 1949
+  },
+  "n_estimators": 300,
+  "contamination": 0.05,
+  "random_state": 42,
+  "train_callers": 300,
+  "calibration_callers": 100,
+  "test_callers": 100,
+  "dataset": "experiments\\synthetic_data\\cdr_experiment_v12.parquet",
+  "dataset_type": "sintetico",
+  "scikit_learn_version": "1.9.1",
+  "joblib_version": "1.6.0",
+  "exported_at_utc": "2026-11-04T01:16:07.349734+00:00",
+  "limitations": [
+    "Las etiquetas y los datos son sinteticos.",
+    "El score no es una probabilidad calibrada.",
+    "El modelo requiere validacion con trafico real etiquetado.",
+    "Este artefacto no implementa por si solo la inferencia en streaming."
+  ]
+}

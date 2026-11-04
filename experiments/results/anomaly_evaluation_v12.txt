@@ -1,0 +1,39 @@
+SENTINELSTREAM - EXPERIMENTO V12
+================================
+Dataset: experiments\synthetic_data\cdr_experiment_v12.parquet
+Llamadas: 518400
+Abonados: 500
+Episodios: 1058
+Features: prior_calls_1m, prior_calls_5m, prior_calls_15m, prior_unique_destinations_24h
+
+PARTICIONES
+Entrenamiento: 310902 llamadas / 300 abonados
+Calibracion: 103681 llamadas / 100 abonados
+Prueba: 103817 llamadas / 100 abonados
+
+MODELO
+IsolationForest
+Estimadores: 300
+Contamination: 0.05
+Random state: 42
+Umbral seleccionado en calibracion: 0.07884560
+F1 calibracion: 0.7687
+Precision calibracion: 0.8288
+
+RESULTADOS EN PRUEBA
+Llamadas de prueba: 103817
+Positivos reales: 2772
+Predicciones positivas: 2338
+TN=100656 FP=389 FN=823 TP=1949
+Accuracy: 0.9883
+Precision: 0.8336
+Recall: 0.7031
+F1: 0.7628
+PR-AUC: 0.7143
+ROC-AUC: 0.9434
+
+LIMITACIONES
+- Dataset y etiquetas sinteticos.
+- Los resultados no demuestran rendimiento con fraude real.
+- El score no es una probabilidad calibrada.
+- La evaluacion se realiza sobre abonados no utilizados en entrenamiento.

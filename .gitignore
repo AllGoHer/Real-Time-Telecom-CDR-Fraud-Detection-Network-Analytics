@@ -1,25 +1,57 @@
-# Python
+﻿# Python
 __pycache__/
 *.py[cod]
 *$py.class
-.venv/
-venv/
 *.egg-info/
 dist/
 build/
+.venv*/
+venv*/
 
-# Docker
-*.log
-
-# IDE
+# IDE and OS
 .vscode/
 .idea/
 *.swp
-
-# OS
 .DS_Store
 Thumbs.db
 
-# Data / checkpoints (no subir datos pesados)
+# Docker and logs
+*.log
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Local data and checkpoints
 data/
 checkpoints/
+experiments/**/*.parquet
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+
+# Temporary and backup files
+.pytest_cache/
+*.bak
+*.bak.*
+*.backup*
+*.prevalidation.bak.py
+
+# Historical experiments
+experiments/generate_synthetic_cdr.py
+experiments/generate_synthetic_cdr_v[2-9].py
+experiments/train_anomaly_v[1-9].py
+experiments/train_anomaly_v10.py
+experiments/train_fraud_model*.py
+experiments/results/anomaly_evaluation_v[1-9].txt
+experiments/results/anomaly_evaluation_v10.txt
+
+# Local modification scripts
+/update_fraud_alerts.py
+
+# Old architecture backup
+docs/*.before_ml_integration

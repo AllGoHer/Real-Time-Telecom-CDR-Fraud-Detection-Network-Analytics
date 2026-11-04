@@ -7,12 +7,15 @@ def main():
     env_settings = EnvironmentSettings.in_streaming_mode()
     t_env = TableEnvironment.create(env_settings)
 
+    t_env.get_config().set(
+        "pipeline.name", "sentinelstream-bronze-cdr"
+    )
     # 🌟 ¡NUEVA LÍNEA CRUCIAL! Habilitar Checkpointing cada 10 segundos
     t_env.get_config().get_configuration().set_string('execution.checkpointing.interval', '10s')
     print("✅ Checkpointing habilitado cada 10 segundos")
 
     # 2. Cargar SOLO el conector de Kafka
-    jars = ["file:///opt/flink/opt/flink-sql-connector-kafka-3.0.1-1.18.jar"]
+    jars = ["file:///opt/flink/lib/flink-sql-connector-kafka-3.0.1-1.18.jar"]
     t_env.get_config().get_configuration().set_string("pipeline.jars", ";".join(jars))
     print("✅ Conector de Kafka cargado correctamente (JSON es nativo en Flink)")
 
@@ -25,8 +28,11 @@ def main():
             callee STRING,
             duration_sec INT,
             country_code STRING,
-            timestamp_str STRING,
-            is_suspicious BOOLEAN
+            `timestamp` STRING,
+            is_suspicious BOOLEAN,
+            is_burst_event BOOLEAN,
+            burst_id STRING,
+            burst_call_index INT
         ) WITH (
             'connector' = 'kafka',
             'topic' = 'cdr_events',
@@ -47,8 +53,11 @@ def main():
             callee STRING,
             duration_sec INT,
             country_code STRING,
-            timestamp_str STRING,
-            is_suspicious BOOLEAN
+            `timestamp` STRING,
+            is_suspicious BOOLEAN,
+            is_burst_event BOOLEAN,
+            burst_id STRING,
+            burst_call_index INT
         ) WITH (
             'connector' = 'filesystem',
             'path' = '{warehouse_path}',
@@ -62,6 +71,7 @@ def main():
     # 5. Ejecutar la inserción continua (Streaming)
     print("🚀 Iniciando ingestión continua de Kafka a JSON (Capa Bronce)...")
     print("   (Este job se quedará corriendo. Presiona Ctrl+C en la terminal para detenerlo)")
+
     
     table_result = t_env.execute_sql("INSERT INTO bronze_cdr SELECT * FROM kafka_source")
     table_result.wait()

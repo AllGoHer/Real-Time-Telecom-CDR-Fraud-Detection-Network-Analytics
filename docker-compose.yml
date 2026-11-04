@@ -1,4 +1,4 @@
-services:
+﻿services:
   kafka:
     image: apache/kafka:3.8.0
     container_name: kafka-cdr
@@ -31,8 +31,12 @@ services:
       - "8081:8081"
     command: jobmanager
     environment:
-      - |
-        FLINK_PROPERTIES=
+      POSTGRES_HOST: postgres-fraud
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      FLINK_PROPERTIES: |
         jobmanager.rpc.address: flink-jobmanager
     volumes:
       - ./data/bronze_data:/tmp/bronze_data
@@ -49,10 +53,14 @@ services:
       - flink-jobmanager
     command: taskmanager
     environment:
-      - |
-        FLINK_PROPERTIES=
+      POSTGRES_HOST: postgres-fraud
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      FLINK_PROPERTIES: |
         jobmanager.rpc.address: flink-jobmanager
-        taskmanager.numberOfTaskSlots: 2
+        taskmanager.numberOfTaskSlots: 4
     volumes:
       - ./data/bronze_data:/tmp/bronze_data
       - ./src/flink_jobs:/opt/flink/jobs
@@ -63,11 +71,11 @@ services:
     image: postgres:15-alpine
     container_name: postgres-fraud
     ports:
-      - "5432:5432"
+      - "5433:5432"
     environment:
-      POSTGRES_USER: fraud_user
-      POSTGRES_PASSWORD: fraud_password
-      POSTGRES_DB: fraud_detection
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/init_postgres.sql:/docker-entrypoint-initdb.d/init.sql
@@ -80,9 +88,14 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-      - GF_USERS_ALLOW_SIGN_UP=false
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:?Set GRAFANA_ADMIN_USER in .env}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in .env}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      POSTGRES_HOST: postgres-fraud
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
     volumes:
       - grafana_data:/var/lib/grafana
       - ./docker/grafana/provisioning:/etc/grafana/provisioning
