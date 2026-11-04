@@ -168,9 +168,9 @@ En una consulta posterior de distribución de scores se obtuvieron estos valores
 
 Los totales corresponden a consultas ejecutadas en ventanas temporales distintas.
 
-La comparación de características entre el conjunto sintético de entrenamiento y el tráfico de producción mostró diferencias relevantes:
+La comparación de características entre el conjunto sintético de entrenamiento y el tráfico generado durante la ejecución mostró diferencias relevantes:
 
-| Característica | Entrenamiento | Producción |
+| Característica | Entrenamiento | Tráfico generado |
 |---|---:|---:|
 | Llamadas previas 1 min (promedio) | 0.35 | 0.34 |
 | Llamadas previas 5 min (promedio) | 0.82 | 1.32 |
