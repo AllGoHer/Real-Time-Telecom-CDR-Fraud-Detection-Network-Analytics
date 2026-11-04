@@ -225,6 +225,48 @@ El modelo V11 y sus metadatos se exportan offline mediante `export_baseline_v11.
 - La inferencia V11 está integrada técnicamente en el flujo Kafka, pero el tráfico generado mostró una tasa de alertas elevada; por tanto, el modelo no está validado para uso operativo.
 - El score de Isolation Forest no representa una probabilidad calibrada de fraude.
 
+### V12 – Experimento offline posterior
+
+Se desarrolló una versión experimental posterior con un conjunto sintético de mayor tamaño.
+
+**Configuración y partición**
+
+- Registros CDR: 518,400.
+- Abonados: 500.
+- Episodios sintéticos: 1,058.
+- Entrenamiento: 300 abonados.
+- Calibración: 100 abonados.
+- Prueba: 100 abonados.
+- Algoritmo: Isolation Forest.
+- Estimadores: 300.
+- Contamination: 0.05.
+- Semilla aleatoria: 42.
+
+**Resultados en el conjunto de prueba**
+
+| Métrica | Resultado |
+|---|---:|
+| Accuracy | 0.9883 |
+| Precision | 0.8336 |
+| Recall | 0.7031 |
+| F1-score | 0.7628 |
+| PR-AUC | 0.7143 |
+| ROC-AUC | 0.9434 |
+| Verdaderos positivos (TP) | 1,949 |
+| Falsos positivos (FP) | 389 |
+| Verdaderos negativos (TN) | 100,656 |
+| Falsos negativos (FN) | 823 |
+
+V12 cuenta con su propio artefacto y metadatos en `experiments/models/`. Es un experimento offline independiente; no sustituye al modelo V11 utilizado por el consumer de inferencia online.
+
+### Limitaciones de los experimentos
+
+- Los registros y las etiquetas utilizados son sintéticos.
+- Los resultados no demuestran rendimiento con fraude real.
+- El score de Isolation Forest no representa una probabilidad calibrada de fraude.
+- La inferencia V11 está integrada técnicamente en el flujo Kafka, pero el tráfico generado mostró una tasa de alertas elevada.
+- Los modelos y sus umbrales requieren validación con datos representativos antes de cualquier uso operativo.
+
 ## Instalación de dependencias
 
 El proyecto utiliza entornos virtuales independientes para evitar conflictos entre las dependencias de cada componente.
