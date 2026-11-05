@@ -1,87 +1,110 @@
-﻿# SentinelStream – Real-Time Telecom CDR Fraud Detection & Network Analytics
+# SentinelStream – Real-Time Telecom CDR Fraud Detection & Network Analytics
 
-Plataforma local de ingeniería de datos para procesar registros de llamadas telefónicas (Call Detail Records, CDR), generar alertas de fraude y analizar métricas de red mediante tecnologías open source y autohospedadas.
+Plataforma local de ingeniería de datos orientada al procesamiento de registros de llamadas telefónicas (Call Detail Records, CDR), detección experimental de anomalías y análisis de métricas de red mediante tecnologías open source y autohospedadas.
 
-El proyecto implementa un pipeline de streaming con Apache Kafka y Apache Flink, procesamiento de datos históricos con Polars y almacenamiento de métricas en PostgreSQL para su visualización en Grafana.
+SentinelStream implementa una arquitectura de streaming basada en Apache Kafka y Apache Flink, procesamiento histórico con Polars, persistencia en PostgreSQL y monitorización con Grafana. Incorpora además un flujo de inferencia online con Isolation Forest V11 y experimentos independientes de Machine Learning, incluyendo V12.
 
 ## Arquitectura
 
+### Pipeline de datos en streaming
+
 ```text
                     CDR Generator
-                      (Python)
+                       Python
                          |
                          v
-                   Apache Kafka
-                   (KRaft mode)
+                    Apache Kafka
+                     KRaft mode
                          |
              +-----------+-----------+
              |                       |
              v                       v
       Apache Flink / PyFlink    ML Inference V11
-             |                  (Python / sklearn)
-        +----+----+                    |
-        |         |                    v
-        v         v              Kafka Predictions
-     Bronze    Alertas                 |
-      JSON   y métricas                v
-                  |              ML Persistence
-                  |              (Python Consumer)
-                  |                    |
-                  +----------+---------+
-                             |
-                             v
-                         PostgreSQL
-                         Gold: Metrics
-                         ML Predictions
-                             |
-                             v
-                           Grafana
-
-
-       PROCESAMIENTO HISTÓRICO INDEPENDIENTE
-
-          Bronze: JSON existente
-                  |
-                  v
-                Polars
-                  |
-                  v
-           Silver: Parquet
-
-
-       ENTRENAMIENTO Y EVALUACIÓN OFFLINE
-
-              CDR sintéticos
-                    |
-                    v
-             Feature Engineering
-                    |
-                    v
-              Isolation Forest
-                    |
-                    v
-            Calibración del umbral
-                    |
-                    v
-            Evaluación del modelo
-                    |
-                    v
-             Modelo V11 y metadatos
+             |                  Python / sklearn
+       +-----+-----+                  |
+       |           |                  v
+       v           v           Kafka Predictions
+    Bronze      Alertas               |
+     JSON      y métricas             v
+                  |            ML Persistence
+                  |            Python Consumer
+                  |                  |
+                  +--------+---------+
+                           |
+                           v
+                       PostgreSQL
+                    Gold: Metrics
+                    ML Predictions
+                           |
+                           v
+                         Grafana
 ```
+
+### Procesamiento histórico
+
+```text
+       Bronze: JSON existente
+                |
+                v
+              Polars
+                |
+                v
+         Silver: Parquet
+```
+
+### Machine Learning: ciclos experimentales
+
+```text
+             V11 - ONLINE
+                  |
+        Entrenamiento offline
+                  |
+           Modelo V11
+                  |
+          Kafka Consumer
+                  |
+        Anomaly Scoring
+                  |
+        Kafka Predictions
+                  |
+          PostgreSQL
+
+
+             V12 - OFFLINE
+                  |
+        Dataset sintético ampliado
+                  |
+          Feature Engineering
+                  |
+            Isolation Forest
+                  |
+         Calibración del umbral
+                  |
+         Evaluación independiente
+                  |
+             Modelo V12
+                  |
+       Comparación offline con V11
+```
+
+**Estado de los modelos:** V11 está integrado técnicamente en el flujo de inferencia online. V12 es un experimento independiente y no está desplegado en el flujo Kafka.
+
 ## Stack tecnológico
 
 | Componente | Tecnología | Función |
 |---|---|---|
-| Generación de datos | Python | Generación de registros CDR sintéticos |
-| Ingesta | Apache Kafka 3.8.0 | Transporte de eventos mediante KRaft, sin ZooKeeper |
-| Streaming | Apache Flink 1.18.1 / PyFlink | Procesamiento de eventos, reglas de alerta y métricas en tiempo real. |
-| Capa Bronze | JSON | Conservación de registros CDR crudos |
-| Capa Silver | Polars | Limpieza, validación y transformación de datos |
+| Generación de datos | Python | Generación de CDR sintéticos |
+| Ingesta | Apache Kafka 3.8.0 | Transporte de eventos mediante KRaft |
+| Streaming | Apache Flink 1.18.1 / PyFlink | Procesamiento de eventos y métricas |
+| Bronze | JSON | Conservación de registros originales |
+| Silver | Polars | Limpieza y transformación |
 | Formato columnar | Apache Parquet | Almacenamiento de datos procesados |
-| Capa Gold | PostgreSQL | Persistencia de métricas y resultados agregados |
-| Visualización | Grafana 10.4.2 | Monitorización de métricas y alertas |
-| Machine Learning | Python / scikit-learn / Isolation Forest V11 | Entrenamiento offline e inferencia en línea mediante consumidores Kafka |
-| Contenedores | Docker Compose | Despliegue del entorno local |
+| Gold | PostgreSQL | Persistencia de métricas |
+| Machine Learning | Python / scikit-learn | Detección experimental de anomalías |
+| Inferencia online | Isolation Forest V11 | Scoring de eventos consumidos desde Kafka |
+| Experimentos offline | Isolation Forest V11 / V12 | Entrenamiento, calibración y evaluación |
+| Visualización | Grafana 10.4.2 | Monitorización y dashboards |
+| Contenedores | Docker Compose | Entorno local autohospedado |
 
 ## Organización del proyecto
 
@@ -104,13 +127,25 @@ telecom-cdr-fraud-detection/
 │
 ├── experiments/
 │   ├── models/
+│   │   ├── isolation_forest_v11_baseline.joblib
+│   │   ├── isolation_forest_v11_baseline.json
+│   │   ├── isolation_forest_v12_baseline.joblib
+│   │   └── isolation_forest_v12_baseline.json
 │   ├── results/
+│   │   ├── anomaly_evaluation_v11.txt
+│   │   ├── anomaly_evaluation_v12.txt
+│   │   ├── anomaly_predictions_v11.parquet
+│   │   └── anomaly_predictions_v12.parquet
 │   ├── synthetic_data/
+│   │   └── cdr_experiment_v12.parquet
 │   ├── build_cdr_features_v1.py
 │   ├── evaluate_rules_v1.py
+│   ├── evaluate_v12_production.py
 │   ├── export_baseline_v11.py
 │   ├── generate_synthetic_cdr_v10.py
-│   └── train_anomaly_v11.py
+│   ├── generate_synthetic_cdr_v12.py
+│   ├── train_anomaly_v11.py
+│   └── train_anomaly_v12.py
 │
 ├── scripts/
 │   ├── init_postgres.sql
@@ -147,57 +182,58 @@ telecom-cdr-fraud-detection/
 ├── Dockerfile.flink
 ├── LICENSE
 └── README.md
-
 ```
 
-## Procesamiento de datos: arquitectura Medallón
+*Nota: el árbol muestra los componentes principales y no enumera todos los archivos históricos ni los artefactos generados.*
+
+## Procesamiento de datos: arquitectura Medallion
 
 ### Bronze – Ingesta de datos crudos
 
 - Generación de registros CDR sintéticos mediante Python.
 - Ingesta de eventos a través de Apache Kafka.
 - Procesamiento de streaming con Apache Flink y PyFlink.
-- Conservación de los registros en formato JSON.
+- Conservación de registros en formato JSON.
 
-### Silver – Limpieza y transformación
+### Silver – Procesamiento y transformación
 
-- Procesamiento local mediante Polars.
-- Lectura de registros JSON.
-- Validación de campos obligatorios.
-- Validación de duración de llamadas.
-- Control de duplicados mediante `call_id`.
-- Enriquecimiento con duración en minutos, clasificación del tipo de llamada y condición internacional.
-- Generación de archivos Parquet.
+- Lectura de registros históricos Bronze.
+- Validación de campos y tratamiento de valores nulos.
+- Eliminación de duplicados por identificador de llamada.
+- Generación de variables derivadas.
+- Clasificación de duración de llamadas.
+- Identificación de llamadas internacionales.
+- Persistencia en formato Parquet mediante Polars.
 
-* El procesamiento Silver mediante Polars se ejecuta como un trabajo histórico independiente del procesamiento de eventos en streaming. No debe interpretarse como una etapa de ejecución continua dentro de Flink.
-
-
-### Gold – Métricas y monitorización
+### Gold – Métricas y persistencia
 
 - Procesamiento de métricas mediante Apache Flink.
 - Persistencia en PostgreSQL.
 - Visualización mediante Grafana.
 - Monitorización de indicadores y tasa de fraude por país.
 
-## Entrenamiento y evaluación offline del modelo V11
+## Machine Learning: entrenamiento e inferencia
 
-Se desarrolló un experimento independiente utilizando Isolation Forest de scikit-learn para evaluar la detección de anomalías en registros CDR sintéticos.
+### V11 – Modelo integrado en inferencia online
 
+Se desarrolló un modelo baseline utilizando Isolation Forest de scikit-learn para evaluar la detección de anomalías en registros CDR sintéticos.
 
-**Configuración del modelo baseline:**
+**Configuración:**
 
 - Algoritmo: Isolation Forest.
 - Número de estimadores: 300.
-- Contaminación: 0.05.
-- Características: 4 variables de comportamiento de llamadas.
+- Contamination: 0.05.
+- Características: 4 variables de comportamiento.
 - Semilla aleatoria: 42.
-- Selección del umbral utilizando el conjunto de calibración.
+- Selección del umbral mediante conjunto de calibración.
 
-  **Estrategia de partición de datos:**
+**Partición de datos:**
 
-La evaluación utiliza una partición por llamante (*caller-based split*), distribuyendo los datos en tres conjuntos independientes: 300 llamantes para entrenamiento, 100 para calibración y 100 para prueba. El umbral de clasificación se selecciona exclusivamente utilizando el conjunto de calibración. El conjunto de prueba se reserva para medir el rendimiento final del modelo.
+- 300 llamantes para entrenamiento.
+- 100 llamantes para calibración.
+- 100 llamantes para prueba.
 
-**Evaluación sobre el conjunto de prueba:**
+**Resultados experimentales:**
 
 | Métrica | Resultado |
 |---|---:|
@@ -207,42 +243,58 @@ La evaluación utiliza una partición por llamante (*caller-based split*), distr
 | F1-score | 0.9441 |
 | PR-AUC | 0.8973 |
 | ROC-AUC | 0.9609 |
-| Verdaderos positivos (TP) | 355 |
-| Falsos positivos (FP) | 13 |
-| Verdaderos negativos (TN) | 1,603 |
-| Falsos negativos (FN) | 29 |
+| TP | 355 |
+| FP | 13 |
+| TN | 1,603 |
+| FN | 29 |
 
-**Comparación experimental**
+También se evaluó una variante ampliada con `is_new_destination_24h`. El baseline obtuvo un F1-score de 0.9441 frente a 0.9318 de la variante ampliada.
 
-También se evaluó una variante ampliada con la característica `is_new_destination_24h`. El modelo baseline obtuvo un F1-score de 0.9441 frente a 0.9318 de la variante ampliada, por lo que se conservó el baseline como referencia.
+**Integración online:**
 
-El modelo V11 y sus metadatos se exportan offline mediante `export_baseline_v11.py`. El artefacto resultante es utilizado por `src/inference/consumer_v11.py` para realizar inferencia sobre eventos recibidos desde Kafka.
+El artefacto V11 se exporta mediante `export_baseline_v11.py` y es utilizado por `src/inference/consumer_v11.py`.
 
-**Limitaciones del experimento:**
+El flujo:
 
-- Los registros y las etiquetas utilizados son sintéticos.
-- Los resultados no demuestran rendimiento con fraude real.
-- La inferencia V11 está integrada técnicamente en el flujo Kafka, pero el tráfico generado mostró una tasa de alertas elevada; por tanto, el modelo no está validado para uso operativo.
-- El score de Isolation Forest no representa una probabilidad calibrada de fraude.
+1. Consume eventos CDR desde Kafka.
+2. Mantiene variables de comportamiento del llamante.
+3. Calcula el anomaly score.
+4. Compara el score con el umbral configurado.
+5. Publica predicciones en Kafka.
+6. Persiste las predicciones en PostgreSQL mediante `ml_predictions_to_postgres.py`.
 
-### V12 – Experimento offline posterior
+**Limitación operativa:** aunque V11 está integrado técnicamente, el tráfico generado mostró una tasa de alertas elevada. Por tanto, no se considera validado para detección operativa de fraude.
 
-Se desarrolló una versión experimental posterior con un conjunto sintético de mayor tamaño.
+### V12 – Experimento offline independiente
 
-**Configuración y partición**
+V12 amplía el experimento con un conjunto sintético de mayor tamaño y una evaluación independiente por abonado.
 
-- Registros CDR: 518,400.
-- Abonados: 500.
-- Episodios sintéticos: 1,058.
-- Entrenamiento: 300 abonados.
-- Calibración: 100 abonados.
-- Prueba: 100 abonados.
+**Dataset:**
+
+| Elemento | Cantidad |
+|---|---:|
+| Registros CDR | 518,400 |
+| Abonados | 500 |
+| Episodios sintéticos | 1,058 |
+| Entrenamiento | 300 abonados |
+| Calibración | 100 abonados |
+| Prueba | 100 abonados |
+
+**Configuración:**
+
 - Algoritmo: Isolation Forest.
 - Estimadores: 300.
 - Contamination: 0.05.
 - Semilla aleatoria: 42.
+- Variables de comportamiento:
+  - `prior_calls_1m`
+  - `prior_calls_5m`
+  - `prior_calls_15m`
+  - `prior_unique_destinations_24h`
 
-**Resultados en el conjunto de prueba**
+El umbral se seleccionó utilizando el conjunto de calibración mediante F1 máximo, con precisión como criterio de desempate.
+
+**Resultados en el conjunto de prueba:**
 
 | Métrica | Resultado |
 |---|---:|
@@ -252,104 +304,78 @@ Se desarrolló una versión experimental posterior con un conjunto sintético de
 | F1-score | 0.7628 |
 | PR-AUC | 0.7143 |
 | ROC-AUC | 0.9434 |
-| Verdaderos positivos (TP) | 1,949 |
-| Falsos positivos (FP) | 389 |
-| Verdaderos negativos (TN) | 100,656 |
-| Falsos negativos (FN) | 823 |
+| TP | 1,949 |
+| FP | 389 |
+| TN | 100,656 |
+| FN | 823 |
 
-V12 cuenta con su propio artefacto y metadatos en `experiments/models/`. Es un experimento offline independiente; no sustituye al modelo V11 utilizado por el consumer de inferencia online.
+**Artefactos principales:**
 
-### Limitaciones de los experimentos
+- `experiments/generate_synthetic_cdr_v12.py`
+- `experiments/train_anomaly_v12.py`
+- `experiments/evaluate_v12_production.py`
+- `experiments/models/isolation_forest_v12_baseline.joblib`
+- `experiments/models/isolation_forest_v12_baseline.json`
+- `experiments/results/anomaly_evaluation_v12.txt`
+- `experiments/results/anomaly_predictions_v12.parquet`
+
+V12 permanece como experimento offline. No reemplaza al modelo V11, no publica predicciones en Kafka y no modifica la persistencia PostgreSQL del flujo online.
+
+### Limitaciones de Machine Learning
 
 - Los registros y las etiquetas utilizados son sintéticos.
 - Los resultados no demuestran rendimiento con fraude real.
+- Los resultados de V11 y V12 corresponden a experimentos diferentes y no deben interpretarse como una comparación directa de modelos sobre un mismo conjunto de prueba.
 - El score de Isolation Forest no representa una probabilidad calibrada de fraude.
-- La inferencia V11 está integrada técnicamente en el flujo Kafka, pero el tráfico generado mostró una tasa de alertas elevada.
-- Los modelos y sus umbrales requieren validación con datos representativos antes de cualquier uso operativo.
+- La inferencia V11 requiere ajustes y validación por su elevada tasa de alertas en tráfico generado.
+- Los modelos y umbrales necesitan validación con datos representativos antes de cualquier uso operativo.
 
-## Instalación de dependencias
+## Instalación y ejecución
 
-El proyecto utiliza entornos virtuales independientes para evitar conflictos entre las dependencias de cada componente.
+El proyecto utiliza entornos virtuales independientes para evitar conflictos entre dependencias.
 
-### Productor Kafka
+Consulta la documentación para los procedimientos completos:
 
-```powershell
-py -3.14 -m venv .venv-producer
-.\.venv-producer\Scripts\python.exe -m pip install -r requirements\producer.txt
-```
-
-### Procesamiento Silver con Polars
-
-```powershell
-py -3.14 -m venv .venv-silver
-.\.venv-silver\Scripts\python.exe -m pip install -r requirements\silver.txt
-```
-
-### Experimentos de Machine Learning
-
-```powershell
-py -3.14 -m venv .venv-ml
-.\.venv-ml\Scripts\python.exe -m pip install -r requirements\ml-experiments.txt
-```
-
-### Inferencia y pruebas
-
-```powershell
-py -3.14 -m venv .venv-inference
-.\.venv-inference\Scripts\python.exe -m pip install -r requirements\inference.txt
-.\.venv-inference\Scripts\python.exe -m pip install -r requirements\dev.txt
-```
+- `docs/EXECUTION_GUIDE.md`: guía de ejecución.
+- `docs/TESTING.md`: validaciones y pruebas.
+- `docs/TROUBLESHOOTING.md`: resolución de problemas.
+- `docs/ARCHITECTURE.md`: arquitectura técnica.
+- `docs/DECISIONS.md`: decisiones de diseño.
 
 ## Pruebas
 
-El proyecto incluye pruebas automatizadas para el consumer de inferencia V11.
-
-Para ejecutarlas desde PowerShell:
+Las pruebas automatizadas del consumer V11 se ejecutan con:
 
 ```powershell
 .\.venv-inference\Scripts\python.exe -m pytest -q tests/test_consumer_v11.py
 ```
 
-Última validación registrada: **10 pruebas superadas**.
+Última validación documentada: 10 pruebas aprobadas.
 
-## Requisitos
+No se deben considerar aprobadas pruebas adicionales sin ejecutarlas y verificar sus resultados.
 
-- Windows 11.
-- Docker Desktop con WSL 2.
-- Python 3.14.
-- Git.
-- Docker Compose.
+## Objetivos técnicos del proyecto
 
-Las credenciales y variables de entorno se administran mediante `.env`. El archivo `.env.example` proporciona una plantilla sin credenciales reales.
+SentinelStream permite demostrar experiencia práctica en:
 
-### Configuración de variables de entorno
+- Arquitecturas de streaming con Apache Kafka.
+- Procesamiento de eventos con Apache Flink y PyFlink.
+- Diseño de pipelines de datos Bronze y Silver.
+- Procesamiento columnar con Polars y Apache Parquet.
+- Persistencia analítica en PostgreSQL.
+- Observabilidad y dashboards con Grafana.
+- Integración de modelos de Machine Learning con consumidores Kafka.
+- Entrenamiento, calibración y evaluación de modelos de anomalías.
+- Desarrollo y documentación de sistemas open source autohospedados.
 
-Antes de iniciar los servicios, crea el archivo `.env` a partir de la plantilla:
+## Estado y alcance
 
-```powershell
-if (!(Test-Path .env)) {
-    Copy-Item .env.example .env
-    Write-Host "Archivo .env creado."
-} else {
-    Write-Host "El archivo .env ya existe. No se modificó."
-}
-```
+SentinelStream es un proyecto de portafolio orientado a ingeniería de datos, procesamiento de eventos y experimentación con detección de anomalías.
 
-## Seguridad y configuración
+La arquitectura implementa un flujo Kafka/Flink y una ruta de inferencia online V11, junto con experimentos offline V11 y V12. Los resultados de Machine Learning se obtuvieron con datos sintéticos y no constituyen evidencia de detección efectiva de fraude real.
 
-- No publicar el archivo `.env`.
-- Mantener las credenciales fuera del código fuente.
-- Utilizar `.env.example` como plantilla de configuración.
-- Verificar que `.env` esté excluido mediante `.gitignore`.
+El proyecto continúa sujeto a mejoras de validación, calibración y evaluación con datos representativos.
 
-## Alcance y limitaciones
-
-SentinelStream es un proyecto de portafolio técnico orientado a demostrar conocimientos de ingeniería de datos, procesamiento de streaming, arquitectura Medallón, analítica y experimentación con Machine Learning.
-
-El proyecto incorpora un flujo de inferencia online V11 que consume eventos desde Kafka, calcula puntuaciones de anomalía con un modelo Isolation Forest y publica las predicciones para su persistencia en PostgreSQL. La integración técnica de la inferencia está implementada mediante los consumers de `src/inference/`.
-
-El entrenamiento, la calibración del umbral y la evaluación del modelo se realizan offline con datos sintéticos. Las métricas de evaluación no demuestran capacidad de detección de fraude real. Además, las pruebas con tráfico generado en ejecución mostraron una tasa de alertas V11 elevada, por lo que el modelo y su umbral requieren validación y calibración con datos representativos antes de cualquier uso operativo.
-
-## License
+## Licencia
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
