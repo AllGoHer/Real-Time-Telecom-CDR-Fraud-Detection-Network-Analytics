@@ -49,7 +49,7 @@ SentinelStream implementa una arquitectura de streaming basada en Apache Kafka y
               Polars
                 |
                 v
-         Silver: Parquet
+         Silver V4: Parquet
 ```
 
 ### Machine Learning: ciclos experimentales
@@ -157,7 +157,8 @@ telecom-cdr-fraud-detection/
 │   │   ├── consumer_v11.py
 │   │   └── ml_predictions_to_postgres.py
 │   ├── polars_jobs/
-│   │   └── silver_layer.py
+│   │   ├── silver_layer.py
+│   │   ├── silver_layer_v4.py
 │   └── producers/
 │       ├── cdr_generator.py
 │       └── requirements.txt
@@ -192,15 +193,56 @@ telecom-cdr-fraud-detection/
 - Procesamiento de streaming con Apache Flink y PyFlink.
 - Conservación de registros en formato JSON.
 
-### Silver – Procesamiento y transformación
+### Silver - Procesamiento y transformacion
 
-- Lectura de registros históricos Bronze.
-- Validación de campos y tratamiento de valores nulos.
-- Eliminación de duplicados por identificador de llamada.
-- Generación de variables derivadas.
-- Clasificación de duración de llamadas.
-- Identificación de llamadas internacionales.
-- Persistencia en formato Parquet mediante Polars.
+El procesamiento historico se realiza mediante Polars sobre los archivos JSON
+conservados en Bronze. Las salidas se almacenan en formato Apache Parquet.
+
+**Evolucion de las versiones:**
+
+- **V3:** version historica inicial del procesamiento Silver.
+- **V4:** incorpora la normalizacion de `is_burst_event` nulo a `false`,
+  conserva las columnas de eventos Burst y genera un archivo independiente:
+  `silver_data_v4.parquet`.
+- V4 procesa los registros Bronze disponibles al momento de su ejecucion.
+  Respecto del snapshot utilizado por V3, incorpora 4,502 registros que
+  llegaron posteriormente a Bronze; no son registros generados artificialmente
+  por la transformacion.
+
+**Transformaciones de Silver V4:**
+
+- Validacion de campos obligatorios y duracion no negativa.
+- Deduplicacion por `call_id`.
+- Normalizacion de `is_burst_event` nulo a `false`.
+- Conservacion de `burst_id` y `burst_call_index` para los eventos Burst.
+- Generacion de `duration_minutes`.
+- Clasificacion de duracion: `short`, `medium` y `long`.
+- Identificacion de llamadas internacionales.
+- Escritura del resultado en Apache Parquet mediante Polars.
+
+**Auditoria del resultado V4:**
+
+| Indicador | Resultado |
+|---|---:|
+| Registros Silver | 380,877 |
+| Registros con Burst `false` | 380,710 |
+| Registros con Burst `true` | 167 |
+| Valores nulos en `is_burst_event` | 0 |
+| `call_id` duplicados en Silver | 0 |
+| Duraciones negativas | 0 |
+| Registros historicos sin campo Burst normalizados a `false` | 374,602 |
+
+La auditoria confirmo la conservacion de los 167 eventos Burst disponibles
+en Bronze y la ausencia de duplicados por `call_id` en el resultado Silver.
+
+Los 374,602 registros historicos que no contenian el campo
+`is_burst_event` se normalizaron a `false`. Este tratamiento representa
+la ausencia del indicador en los registros historicos, no una etiqueta
+de fraude ni una clasificacion confirmada de comportamiento normal.
+
+El procesamiento Silver V4 es un flujo historico por lotes. No alimenta
+directamente al consumer de inferencia online V11, que consume eventos
+desde Kafka de manera independiente.
 
 ### Gold – Métricas y persistencia
 
