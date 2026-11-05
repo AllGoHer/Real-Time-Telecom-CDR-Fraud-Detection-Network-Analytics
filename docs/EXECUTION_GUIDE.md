@@ -147,11 +147,58 @@ No incluyas contraseñas ni secretos en capturas, documentación pública o repo
 
 La instancia de Grafana utiliza el puerto 3000 cuando está publicado según la configuración actual de Docker Compose.
 
-## 9. Experimento offline de anomalías
+## 9. Machine Learning: inferencia online V11 y experimento offline V12
 
-Los experimentos de scikit-learn utilizan datos sintéticos y se ejecutan de forma independiente del pipeline de streaming.
+SentinelStream mantiene dos flujos de Machine Learning independientes. V11 corresponde a la inferencia online conectada a Kafka. V12 es un experimento offline y no está integrado en el consumidor online.
 
-Antes de volver a ejecutar un generador o entrenador, comprueba si sus archivos de salida ya existen. Conserva los resultados, el modelo y los metadatos de V11 si deseas mantener la evaluación documentada del baseline actual.
+### 9.1. Inferencia online V11
+
+1. `consumer_v11.py` consume eventos del tópico Kafka `cdr_events`.
+2. Ejecuta inferencia con `experiments/models/isolation_forest_v11_baseline.joblib`.
+3. Publica predicciones en `cdr_ml_predictions_v11`.
+4. `ml_predictions_to_postgres.py` almacena las predicciones en `public.fraud_ml_predictions`.
+
+**Requisitos:** Kafka y PostgreSQL activos, generador CDR en ejecución, modelo y metadatos V11 disponibles, entorno `src/inference/venv` instalado y `.env` configurado.
+
+**Ejecución:** abre dos terminales PowerShell desde la raíz del proyecto.
+
+Terminal 1: persistencia en PostgreSQL.
+
+```powershell
+.\src\inference\venv\Scripts\python.exe .\src\inference\ml_predictions_to_postgres.py
+```
+
+Terminal 2: inferencia V11.
+
+```powershell
+.\src\inference\venv\Scripts\python.exe .\src\inference\consumer_v11.py
+```
+
+Mantén ambos procesos activos. Para detenerlos utiliza `Ctrl + C` en cada terminal. No inicies instancias duplicadas del consumidor sin revisar el grupo Kafka y su estado SQLite.
+
+Conserva `src/inference/state_v11.sqlite3` y sus archivos auxiliares `-shm` y `-wal`.
+
+**Verificación de predicciones almacenadas:**
+
+```powershell
+docker exec postgres-fraud psql -U fraud_user -d fraud_detection -c "SELECT COUNT(*) AS total_predicciones FROM public.fraud_ml_predictions;"
+```
+
+### 9.2. Experimento offline V12
+
+V12 es un experimento independiente de entrenamiento y evaluación con datos sintéticos. No sustituye al consumidor V11 ni está conectado al flujo online de Kafka.
+
+Sus métricas representan resultados experimentales sobre datos sintéticos; no deben interpretarse como una tasa de detección de fraude real ni como evidencia de rendimiento en producción.
+
+Antes de volver a ejecutar experimentos, revisa los archivos de salida para evitar sobrescribir resultados existentes.
+
+### 9.3. Alcance y limitaciones
+
+- V11 está implementado como flujo de inferencia online, pero sus resultados son experimentales y dependen de la distribución de los eventos generados.
+- V12 corresponde exclusivamente a evaluación offline.
+- Los datos utilizados en las pruebas son sintéticos.
+- Una predicción o puntuación del modelo no equivale por sí misma a fraude confirmado.
+- El sistema no debe presentarse como validado con tráfico real de una operadora.
 
 ## 10. Detención y protección de datos
 
