@@ -134,10 +134,7 @@ telecom-cdr-fraud-detection/
 │   ├── results/
 │   │   ├── anomaly_evaluation_v11.txt
 │   │   ├── anomaly_evaluation_v12.txt
-│   │   ├── anomaly_predictions_v11.parquet
-│   │   └── anomaly_predictions_v12.parquet
-│   ├── synthetic_data/
-│   │   └── cdr_experiment_v12.parquet
+│   │   └── rules_evaluation_v1.txt
 │   ├── build_cdr_features_v1.py
 │   ├── evaluate_rules_v1.py
 │   ├── evaluate_v12_production.py
@@ -317,7 +314,7 @@ El umbral se seleccionó utilizando el conjunto de calibración mediante F1 máx
 - `experiments/models/isolation_forest_v12_baseline.joblib`
 - `experiments/models/isolation_forest_v12_baseline.json`
 - `experiments/results/anomaly_evaluation_v12.txt`
-- `experiments/results/anomaly_predictions_v12.parquet`
+- `experiments/results/anomaly_predictions_v12.parquet` (generado localmente; excluido de Git)
 
 V12 permanece como experimento offline. No reemplaza al modelo V11, no publica predicciones en Kafka y no modifica la persistencia PostgreSQL del flujo online.
 
