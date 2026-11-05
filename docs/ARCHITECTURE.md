@@ -62,7 +62,7 @@ SentinelStream es un proyecto local de ingeniería de datos orientado al procesa
                CALIBRACIÓN Y EVALUACIÓN
                          |
                          v
-                 MODELO V11 Y MÉTRICAS
+                 MODELOS V11 (ONLINE) Y V12 (OFFLINE)
 ```
 
 El diagrama representa las capas y los componentes lógicos del proyecto. Las rutas concretas de escritura y lectura dependen de la configuración de los trabajos y servicios.
@@ -159,6 +159,62 @@ Consume las predicciones publicadas en Kafka y las persiste en PostgreSQL, en la
 - Las métricas offline no demuestran detección de fraude real.
 - Las pruebas con tráfico generado mostraron una tasa de alertas V11 elevada.
 - El modelo y su umbral requieren validación con datos representativos antes de cualquier uso operativo.
+
+
+### Experimento offline V12
+
+Archivos principales:
+
+- Entrenamiento: `experiments/train_anomaly_v12.py`
+- Evaluación comparativa: `experiments/evaluate_v12_production.py`
+- Modelo: `experiments/models/isolation_forest_v12_baseline.joblib`
+- Metadatos: `experiments/models/isolation_forest_v12_baseline.json`
+- Resultados: `experiments/results/anomaly_evaluation_v12.txt`
+
+V12 es un experimento independiente del consumidor online V11. Entrena un modelo
+Isolation Forest con un dataset sintético de 518,400 llamadas y 500 abonados.
+
+La partición se realiza por abonado, evitando que un mismo abonado aparezca en
+más de un conjunto:
+
+- Entrenamiento: 300 abonados y 310,902 llamadas.
+- Calibración: 100 abonados y 103,681 llamadas.
+- Prueba: 100 abonados y 103,817 llamadas.
+
+El modelo utiliza 300 estimadores, `contamination=0.05` y `random_state=42`.
+El umbral seleccionado en calibración es `0.07884560`, maximizando F1 y usando
+precision como criterio de desempate.
+
+Resultados sobre el conjunto de prueba:
+
+| Métrica | Resultado |
+|---|---:|
+| Accuracy | 0.9883 |
+| Precision | 0.8336 |
+| Recall | 0.7031 |
+| F1 | 0.7628 |
+| PR-AUC | 0.7143 |
+| ROC-AUC | 0.9434 |
+
+Matriz de confusión: TN=100,656; FP=389; FN=823; TP=1,949.
+
+#### Comparación de V12 con registros evaluados por V11
+
+El script `experiments/evaluate_v12_production.py` consulta registros con estado
+`scored` en `public.fraud_ml_predictions`, carga el modelo V12 y calcula sus
+predicciones sobre las características almacenadas para comparar ambos modelos.
+
+Esta evaluación es comparativa y de solo lectura: calcula tasas de alerta,
+acuerdo entre decisiones y distribuciones de scores y características. No
+actualiza PostgreSQL, no publica predicciones en Kafka y no sustituye al
+consumidor V11.
+
+La muestra consultada no dispone de etiquetas verificadas de fraude; por tanto,
+esta comparación no permite calcular precisión o recall reales ni demostrar
+rendimiento en producción.
+
+V12 permanece como artefacto experimental offline y no está conectado al
+consumidor de inferencia online V11.
 
 ## 7. Entorno de ejecución
 

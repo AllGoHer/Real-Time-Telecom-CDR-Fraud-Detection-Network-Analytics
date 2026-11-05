@@ -38,9 +38,13 @@
 
 ## 7. ¿Por qué separar el procesamiento en streaming del experimento de anomalías?
 
-**Decisión:** Mantener los trabajos de streaming con Kafka y Flink separados del experimento offline de detección de anomalías con scikit-learn.
+**Decisión:** Mantener diferenciados el procesamiento de eventos en streaming, la inferencia online V11 y el experimento offline V12, documentando sus conexiones reales.
 
-**Justificación:** El experimento con datos sintéticos permite evaluar un enfoque de detección sin afirmar que el modelo está integrado en el flujo de producción. Los resultados experimentales no demuestran por sí solos la detección de fraude real.
+**Justificación:** Kafka y Flink procesan el flujo de eventos. El consumidor V11 de `src/inference/consumer_v11.py` está conectado técnicamente a Kafka para generar predicciones online, que otro consumidor persiste en PostgreSQL. Esta integración técnica no implica que el modelo esté validado para detectar fraude real.
+
+V12 es un experimento independiente de entrenamiento y evaluación offline con scikit-learn. Su script comparativo puede aplicar el modelo V12 a características de registros previamente evaluados por V11, pero no modifica PostgreSQL ni publica predicciones en el flujo Kafka.
+
+Ambas versiones utilizan datos sintéticos para su desarrollo y evaluación. Sus resultados no demuestran por sí solos rendimiento con tráfico real ni detección efectiva de fraude.
 
 ## 8. ¿Por qué mantener el proyecto local y de código abierto?
 
