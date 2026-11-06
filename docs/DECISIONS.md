@@ -36,15 +36,27 @@
 
 **Justificación:** Grafana permite construir paneles de monitoreo y consultar las métricas almacenadas en PostgreSQL. Se eligió para visualizar los indicadores del proyecto sin incorporar una plataforma adicional de analítica como Apache Superset.
 
-## 7. ¿Por qué separar el procesamiento en streaming del experimento de anomalías?
+## 7. ¿Por qué separar el entrenamiento offline de la inferencia online?
 
-**Decisión:** Mantener diferenciados el procesamiento de eventos en streaming, la inferencia online V11 y el experimento offline V12, documentando sus conexiones reales.
+**Decisión:** Mantener separado el entrenamiento y la evaluación offline de la inferencia online, utilizando el modelo Isolation Forest V12 como versión activa del consumidor de predicciones.
 
-**Justificación:** Kafka y Flink procesan el flujo de eventos. El consumidor V11 de `src/inference/consumer_v11.py` está conectado técnicamente a Kafka para generar predicciones online, que otro consumidor persiste en PostgreSQL. Esta integración técnica no implica que el modelo esté validado para detectar fraude real.
+**Justificación:** El entrenamiento, la calibración y la evaluación de V12 se realizan mediante scikit-learn sobre un conjunto de datos CDR sintético. Este proceso produce el artefacto del modelo y sus metadatos, que posteriormente utiliza el consumidor online.
 
-V12 es un experimento independiente de entrenamiento y evaluación offline con scikit-learn. Su script comparativo puede aplicar el modelo V12 a características de registros previamente evaluados por V11, pero no modifica PostgreSQL ni publica predicciones en el flujo Kafka.
+El consumidor `src/inference/consumer_v12.py`:
 
-Ambas versiones utilizan datos sintéticos para su desarrollo y evaluación. Sus resultados no demuestran por sí solos rendimiento con tráfico real ni detección efectiva de fraude.
+- Consume eventos CDR desde Kafka.
+- Construye las cuatro características de comportamiento requeridas.
+- Carga el modelo Isolation Forest V12 y sus metadatos.
+- Calcula la puntuación de anomalía y la compara con el umbral configurado.
+- Publica las predicciones en el topic `cdr_ml_predictions_v11`.
+
+El consumidor `src/inference/ml_predictions_to_postgres.py` recibe las predicciones y las persiste en PostgreSQL, en la tabla `fraud_ml_predictions`. Grafana consulta esta tabla y sus paneles de inferencia ML se filtran para mostrar los resultados correspondientes a V12.
+
+V11 se conserva como versión anterior y referencia histórica de comparación. Su tasa de anomalías observada en el tráfico generado motivó la evaluación y sustitución del modelo activo.
+
+La validación offline de V12 utiliza datos sintéticos y permite medir su comportamiento frente a etiquetas conocidas dentro de ese experimento. La observación online confirma que el consumidor procesa eventos y genera predicciones, pero no demuestra precisión de detección de fraude real porque no se dispone de etiquetas verificadas de tráfico real.
+
+**Limitaciones:** Los resultados offline no deben presentarse como métricas de rendimiento sobre fraude real. La tasa de anomalías observada online tampoco equivale a precisión, recall ni tasa real de fraude.
 
 ## 8. ¿Por qué mantener el proyecto local y de código abierto?
 

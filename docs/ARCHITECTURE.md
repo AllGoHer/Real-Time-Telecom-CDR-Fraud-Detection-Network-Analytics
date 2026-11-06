@@ -26,7 +26,7 @@ SentinelStream es un proyecto local de ingeniería de datos orientado al procesa
          MODO KRAFT            |                v
           /       \            |           SILVER: PARQUET
          v         v           |
-      APACHE    CONSUMER V11   |
+      APACHE    CONSUMER V12   |
       FLINK     ISOLATION      |
       PYFLINK   FOREST         |
        /  \         |          |
@@ -62,7 +62,7 @@ SentinelStream es un proyecto local de ingeniería de datos orientado al procesa
                CALIBRACIÓN Y EVALUACIÓN
                          |
                          v
-                 MODELOS V11 (ONLINE) Y V12 (OFFLINE)
+                 MODELO V12 (ONLINE)
 ```
 
 El diagrama representa las capas y los componentes lógicos del proyecto. Las rutas concretas de escritura y lectura dependen de la configuración de los trabajos y servicios.
@@ -78,7 +78,7 @@ El diagrama representa las capas y los componentes lógicos del proyecto. Las ru
 | Silver | Polars y Apache Parquet | Limpiar, validar y transformar registros históricos mediante procesamiento independiente |
 | Gold | PostgreSQL | Almacenar métricas para consultas |
 | Monitorización | Grafana 10.4.2 | Visualizar métricas mediante paneles |
-| Inferencia ML | Python / scikit-learn / Isolation Forest V11 | Consumir eventos CDR desde Kafka, calcular puntuaciones de anomalía y publicar predicciones en Kafka |
+| Inferencia ML | Python / scikit-learn / Isolation Forest V12 | Consumir eventos CDR desde Kafka, calcular puntuaciones de anomalía y publicar predicciones en Kafka |
 | Persistencia ML | Python / Kafka / PostgreSQL | Consumir predicciones y almacenarlas en `fraud_ml_predictions` |
 | Entrenamiento ML | scikit-learn / Isolation Forest | Entrenar, calibrar y evaluar el modelo offline con datos sintéticos |
 
@@ -122,23 +122,22 @@ Estas direcciones deben coincidir con los listeners y puertos definidos en la co
 
 ## 6. Inferencia online de Machine Learning
 
-El proyecto implementa un flujo de inferencia online mediante dos procesos Python independientes.
+El proyecto utiliza el modelo Isolation Forest V12 para generar puntuaciones de anomalía a partir de eventos CDR consumidos desde Kafka.
 
-### Consumer de inferencia V11
+### Consumer de inferencia V12
 
-Archivo: `src/inference/consumer_v11.py`
+Archivo: `src/inference/consumer_v12.py`
 
 Responsabilidades:
 
 - Consumir registros CDR desde Kafka.
 - Mantener características de comportamiento por llamante.
 - Construir las variables requeridas por el modelo.
-- Cargar el artefacto Isolation Forest V11.
-- Calcular la puntuación de anomalía.
-- Comparar la puntuación con el umbral configurado.
+- Cargar el artefacto Isolation Forest V12 y sus metadatos.
+- Calcular la puntuación de anomalía y compararla con el umbral configurado.
 - Publicar las predicciones en Kafka.
 
-El modelo V11 utiliza cuatro características:
+Características utilizadas:
 
 - `prior_calls_1m`
 - `prior_calls_5m`
@@ -153,15 +152,19 @@ Archivo: `src/inference/ml_predictions_to_postgres.py`
 
 Consume las predicciones publicadas en Kafka y las persiste en PostgreSQL, en la tabla `fraud_ml_predictions`.
 
-### Limitaciones
+El consumidor V12 utiliza actualmente el topic `cdr_ml_predictions_v11` y el grupo `sentinelstream-v11-inference`. Estos nombres conservan la nomenclatura de la integración anterior; no indican que el modelo V11 siga realizando la inferencia activa.
 
-- El entrenamiento y la calibración V11 utilizan datos sintéticos.
-- Las métricas offline no demuestran detección de fraude real.
-- Las pruebas con tráfico generado mostraron una tasa de alertas V11 elevada.
-- El modelo y su umbral requieren validación con datos representativos antes de cualquier uso operativo.
+### Visualización
 
+Grafana consulta PostgreSQL. Los paneles de porcentaje de anomalías, predicciones por minuto y últimas detecciones ML están filtrados por `model_version = 'V12'`.
 
-### Experimento offline V12
+### Validación online observada
+
+En una comprobación del 5 de noviembre de 2026 se observaron 688 predicciones V12 con estado `scored`: 15 clasificadas como anomalías y 673 como normales. La proporción de anomalías de esa muestra fue del 2.18 %.
+
+Este resultado confirma el funcionamiento técnico del flujo durante la ventana observada. No representa una tasa real de fraude ni demuestra precisión sobre tráfico real etiquetado.
+
+### Entrenamiento y evaluación offline V12
 
 Archivos principales:
 
@@ -171,21 +174,15 @@ Archivos principales:
 - Metadatos: `experiments/models/isolation_forest_v12_baseline.json`
 - Resultados: `experiments/results/anomaly_evaluation_v12.txt`
 
-V12 es un experimento independiente del consumidor online V11. Entrena un modelo
-Isolation Forest con un dataset sintético de 518,400 llamadas y 500 abonados.
-
-La partición se realiza por abonado, evitando que un mismo abonado aparezca en
-más de un conjunto:
+V12 se entrenó y evaluó con un conjunto sintético de 518,400 llamadas y 500 abonados. La partición se realizó por abonado:
 
 - Entrenamiento: 300 abonados y 310,902 llamadas.
 - Calibración: 100 abonados y 103,681 llamadas.
 - Prueba: 100 abonados y 103,817 llamadas.
 
-El modelo utiliza 300 estimadores, `contamination=0.05` y `random_state=42`.
-El umbral seleccionado en calibración es `0.07884560`, maximizando F1 y usando
-precision como criterio de desempate.
+Configuración: 300 estimadores, `contamination=0.05` y `random_state=42`. El umbral seleccionado en calibración fue `0.07884560`.
 
-Resultados sobre el conjunto de prueba:
+Resultados offline sobre el conjunto de prueba:
 
 | Métrica | Resultado |
 |---|---:|
@@ -198,23 +195,37 @@ Resultados sobre el conjunto de prueba:
 
 Matriz de confusión: TN=100,656; FP=389; FN=823; TP=1,949.
 
-#### Comparación de V12 con registros evaluados por V11
+Estas métricas corresponden exclusivamente al conjunto sintético de prueba y no representan rendimiento demostrado sobre fraude real.
 
-El script `experiments/evaluate_v12_production.py` consulta registros con estado
-`scored` en `public.fraud_ml_predictions`, carga el modelo V12 y calcula sus
-predicciones sobre las características almacenadas para comparar ambos modelos.
 
-Esta evaluación es comparativa y de solo lectura: calcula tasas de alerta,
-acuerdo entre decisiones y distribuciones de scores y características. No
-actualiza PostgreSQL, no publica predicciones en Kafka y no sustituye al
-consumidor V11.
+### Evaluación comparativa V12 sobre registros almacenados
 
-La muestra consultada no dispone de etiquetas verificadas de fraude; por tanto,
-esta comparación no permite calcular precisión o recall reales ni demostrar
-rendimiento en producción.
+El script `experiments/evaluate_v12_production.py` realiza una evaluación comparativa de solo lectura:
 
-V12 permanece como artefacto experimental offline y no está conectado al
-consumidor de inferencia online V11.
+- Consulta en PostgreSQL las predicciones V11 con estado `scored` de las últimas 24 horas.
+- Recupera las cuatro características de comportamiento almacenadas en cada registro.
+- Carga el modelo Isolation Forest V12 y sus metadatos, verificando la compatibilidad de las características.
+- Calcula los scores y las decisiones de V12 sobre esas mismas características.
+- Compara las tasas de alertas, el acuerdo entre las decisiones V11 y V12 y sus distribuciones de scores.
+- Compara los percentiles P50, P95 y P99 de las características observadas frente al conjunto sintético V12.
+
+La evaluación no modifica PostgreSQL, no publica predicciones en Kafka y no altera el consumidor online.
+
+La muestra no dispone de etiquetas verificadas de fraude. Por tanto, la comparación permite analizar el comportamiento de ambos modelos y las diferencias entre distribuciones, pero no calcular precisión o recall reales ni demostrar detección efectiva de fraude.
+
+### V11 como referencia histórica
+
+V11 fue la versión anterior del consumidor online. En la muestra analizada durante la evaluación comparativa, presentó una tasa de anomalías del 100 %, lo que evidenció que su umbral no separaba adecuadamente el tráfico generado en esas condiciones.
+
+V11 se conserva como referencia histórica; V12 es la versión activa del consumidor de inferencia.
+
+### Limitaciones
+
+- Los datos y las etiquetas utilizados para entrenar y evaluar V12 son sintéticos.
+- No se dispone de etiquetas verificadas de fraude real para calcular precisión o recall online.
+- El score de Isolation Forest no es una probabilidad calibrada.
+- La tasa de anomalías online depende de la distribución del tráfico, las características calculadas y el umbral del modelo.
+- El modelo requiere validación adicional con datos representativos y etiquetados antes de cualquier uso operativo.
 
 ## 7. Entorno de ejecución
 
@@ -232,5 +243,5 @@ Antes de ejecutar trabajos que escriban en archivos Parquet o tablas de PostgreS
 
 - La arquitectura documentada debe mantenerse alineada con la configuración efectiva del repositorio.
 
-- La inferencia V11 está integrada técnicamente en el flujo Kafka, pero su rendimiento no está validado para detección de fraude real ni para uso operativo.
+- La inferencia V12 está integrada técnicamente en el flujo Kafka, pero su rendimiento para detectar fraude real no está validado con tráfico etiquetado.
 - La presencia de un componente en este documento no sustituye la verificación de que su flujo esté implementado y operativo.

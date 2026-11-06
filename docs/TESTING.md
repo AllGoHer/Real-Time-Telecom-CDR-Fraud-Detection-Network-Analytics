@@ -67,7 +67,7 @@ Estas comprobaciones deben realizarse sobre los datos existentes, utilizando con
 
 ## 7. Resultados históricos del experimento offline V9
 
-Esta sección conserva los resultados históricos de V9. La versión más reciente del experimento de Machine Learning documentada en este repositorio es V11, cuyos resultados se presentan en el README principal.
+Esta sección conserva los resultados históricos de V9. La versión más reciente del modelo de Machine Learning documentada en este repositorio es V12. Su entrenamiento, evaluación offline y validación online se describen en [ML_MODEL_V12.md](ML_MODEL_V12.md).
 
 El experimento utiliza datos sintéticos de CDR y una separación temporal entre entrenamiento, calibración y prueba. El modelo Isolation Forest se evaluó fuera del flujo de producción.
 
@@ -179,4 +179,28 @@ La comparación de características entre el conjunto sintético de entrenamient
 
 **Conclusión:** el umbral calibrado con datos sintéticos no separa adecuadamente las observaciones del tráfico generado en ejecución. El 100% de clasificaciones como anomalía no representa una tasa real de fraude.
 
-V11 permanece como integración experimental de inferencia en línea. Se requiere una futura recalibración y evaluación con datos representativos antes de considerarlo operativo para detección real de fraude.
+V11 fue la versión anterior de la inferencia online y se conserva como referencia histórica. V12 es el consumidor activo; su rendimiento para detectar fraude real aún requiere validación con tráfico real etiquetado.
+## 13. Validación de inferencia online ML V12 — 05/11/2026
+
+Se verificó el funcionamiento de `src/inference/consumer_v12.py` y la persistencia de sus predicciones en PostgreSQL.
+
+Muestra observada en `public.fraud_ml_predictions`:
+
+| Indicador | Resultado |
+|---|---:|
+| Predicciones V12 procesadas | 688 |
+| Anomalías | 15 |
+| Normales | 673 |
+| Porcentaje de anomalías | 2.18% |
+
+La muestra confirma que V12 genera predicciones y que estas llegan a PostgreSQL. Los paneles ML 7, 8 y 9 de Grafana filtran exclusivamente `model_version = 'V12'`.
+
+### Interpretación
+
+- El porcentaje de anomalías corresponde a esa muestra y ventana de ejecución.
+- No representa una tasa de fraude confirmado.
+- No permite calcular precisión o recall sobre tráfico real porque no se dispone de etiquetas verificadas.
+- Los resultados offline de V12 se documentan en `ML_MODEL_V12.md`.
+- Las pruebas automatizadas documentadas para V11 se conservan como historial. Esta validación de V12 fue una comprobación operativa, no una nueva suite de pruebas automatizadas.
+
+V12 queda documentado como consumidor de inferencia online activo. V11 se conserva como referencia histórica.

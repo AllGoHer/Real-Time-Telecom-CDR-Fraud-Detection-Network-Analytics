@@ -1,4 +1,4 @@
-﻿import csv
+import csv
 import io
 import json
 import subprocess
@@ -30,6 +30,8 @@ COPY (
         CASE WHEN is_anomaly THEN 1 ELSE 0 END AS v11_prediction
     FROM public.fraud_ml_predictions
     WHERE status = 'scored'
+      AND caller LIKE 'CALLER-%'
+      AND received_at >= NOW() - INTERVAL '24 hours'
       AND features ? 'prior_calls_1m'
       AND features ? 'prior_calls_5m'
       AND features ? 'prior_calls_15m'
