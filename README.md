@@ -4,92 +4,33 @@
 
 Plataforma local de ingeniería de datos orientada al procesamiento de registros de llamadas telefónicas (Call Detail Records, CDR), detección experimental de anomalías y análisis de métricas de red mediante tecnologías open source y autohospedadas.
 
-SentinelStream implementa una arquitectura de streaming basada en Apache Kafka y Apache Flink, procesamiento histórico con Polars, persistencia en PostgreSQL y monitorización con Grafana. Incorpora además un flujo de inferencia online con Isolation Forest V11 y experimentos independientes de Machine Learning, incluyendo V12.
+SentinelStream implementa una arquitectura de streaming basada en Apache Kafka y Apache Flink, procesamiento histórico con Polars, persistencia en PostgreSQL y monitorización con Grafana. Incorpora inferencia online con Isolation Forest V12, cuyo entrenamiento y evaluación se realizan offline.
+
 
 ## Arquitectura
 
-### Pipeline de datos en streaming
+### Flujo integral de datos — SentinelStream
 
-```text
-                    CDR Generator
-                       Python
-                         |
-                         v
-                    Apache Kafka
-                     KRaft mode
-                         |
-             +-----------+-----------+
-             |                       |
-             v                       v
-      Apache Flink / PyFlink    ML Inference V11
-             |                  Python / sklearn
-       +-----+-----+                  |
-       |           |                  v
-       v           v           Kafka Predictions
-    Bronze      Alertas               |
-     JSON      y métricas             v
-                  |            ML Persistence
-                  |            Python Consumer
-                  |                  |
-                  +--------+---------+
-                           |
-                           v
-                       PostgreSQL
-                    Gold: Metrics
-                    ML Predictions
-                           |
-                           v
-                         Grafana
-```
+La arquitectura separa el procesamiento de eventos en tiempo real, el procesamiento histórico y el ciclo de Machine Learning. Isolation Forest V12 participa en la inferencia online; su entrenamiento y evaluación se realizan offline.
 
-### Procesamiento histórico
+<p align="center">
+  <img
+    src="docs/images/sentinelstream-architecture.png"
+    alt="SentinelStream - Arquitectura integral de datos y Machine Learning V12"
+    width="850"
+  />
+</p>
 
-```text
-       Bronze: JSON existente
-                |
-                v
-              Polars
-                |
-                v
-         Silver V4: Parquet
-```
+**Recorrido de los datos**
 
-### Machine Learning: ciclos experimentales
+1. **Ingesta:** el generador Python produce eventos CDR y los publica en Apache Kafka mediante KRaft.
+2. **Streaming:** Apache Flink procesa los eventos, genera alertas y calcula métricas por ventanas.
+3. **Procesamiento histórico:** los datos Bronze en JSON se validan y transforman con Polars para generar archivos Silver en Parquet.
+4. **Machine Learning:** Isolation Forest V12 se entrena y calibra offline. Su artefacto se utiliza en el consumidor de inferencia online, que publica predicciones en Kafka.
+5. **Persistencia:** PostgreSQL almacena alertas, métricas agregadas y predicciones ML.
+6. **Visualización:** Grafana consulta PostgreSQL para mostrar el comportamiento del sistema y las detecciones de anomalías.
 
-```text
-             V11 - ONLINE
-                  |
-        Entrenamiento offline
-                  |
-           Modelo V11
-                  |
-          Kafka Consumer
-                  |
-        Anomaly Scoring
-                  |
-        Kafka Predictions
-                  |
-          PostgreSQL
-
-
-             V12 - OFFLINE
-                  |
-        Dataset sintético ampliado
-                  |
-          Feature Engineering
-                  |
-            Isolation Forest
-                  |
-         Calibración del umbral
-                  |
-         Evaluación independiente
-                  |
-             Modelo V12
-                  |
-       Comparación offline con V11
-```
-
-**Estado de los modelos:** V11 está integrado técnicamente en el flujo de inferencia online. V12 es un experimento independiente y no está desplegado en el flujo Kafka.
+**Nota técnica:** el topic `cdr_ml_predictions_v11` conserva su nombre histórico por compatibilidad; el modelo que realiza la inferencia es V12. El entrenamiento offline y la inferencia online son procesos distintos.
 
 ## Stack tecnológico
 
