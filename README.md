@@ -1,3 +1,5 @@
+![SentinelStream - Real-Time Telecom CDR Fraud Detection](docs/images/sentinelstream-cover.png)
+
 # SentinelStream – Real-Time Telecom CDR Fraud Detection & Network Analytics
 
 Plataforma local de ingeniería de datos orientada al procesamiento de registros de llamadas telefónicas (Call Detail Records, CDR), detección experimental de anomalías y análisis de métricas de red mediante tecnologías open source y autohospedadas.
