@@ -21,16 +21,6 @@ La arquitectura separa el procesamiento de eventos en tiempo real, el procesamie
   />
 </p>
 
-### Demostraciones del proyecto
-
-#### Dashboard de SentinelStream
-
-[![Ver demostración del dashboard](https://img.youtube.com/vi/zH_MiRB8mOg/hqdefault.jpg)](https://youtu.be/zH_MiRB8mOg)
-
-#### Ejecución de Apache Flink
-
-[![Ver demostración de los jobs de Flink](https://img.youtube.com/vi/35viOAI7Ecc/hqdefault.jpg)](https://youtu.be/35viOAI7Ecc)
-
 **Recorrido de los datos**
 
 1. **Ingesta:** el generador Python produce eventos CDR y los publica en Apache Kafka mediante KRaft.
