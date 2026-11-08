@@ -2,6 +2,7 @@
   kafka:
     image: apache/kafka:3.8.0
     container_name: kafka-cdr
+    restart: unless-stopped
     ports:
       - "9092:9092"
       - "9094:9094"
@@ -27,6 +28,7 @@
       context: .
       dockerfile: Dockerfile.flink
     container_name: flink-jobmanager
+    restart: unless-stopped
     ports:
       - "8081:8081"
     command: jobmanager
@@ -49,6 +51,7 @@
       context: .
       dockerfile: Dockerfile.flink
     container_name: flink-taskmanager
+    restart: unless-stopped
     depends_on:
       - flink-jobmanager
     command: taskmanager
@@ -70,6 +73,7 @@
   postgres:
     image: postgres:15-alpine
     container_name: postgres-fraud
+    restart: unless-stopped
     ports:
       - "5433:5432"
     environment:
@@ -85,6 +89,7 @@
   grafana:
     image: grafana/grafana:10.4.2
     container_name: grafana-fraud
+    restart: unless-stopped
     ports:
       - "3000:3000"
     environment:

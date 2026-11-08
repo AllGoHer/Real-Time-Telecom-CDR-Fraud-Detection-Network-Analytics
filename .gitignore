@@ -1,4 +1,4 @@
-﻿# Python
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
@@ -55,3 +55,17 @@ experiments/results/anomaly_evaluation_v10.txt
 
 # Old architecture backup
 docs/*.before_ml_integration
+
+# Local documentation backups
+README_backup_*.md
+docs/*_backup_*.md
+docs/encoding_backups/
+
+# Historical Grafana dashboards
+docker/grafana/provisioning/dashboards/*.pre_v12_*.json
+
+# Local helper scripts
+/actualizar_readme.ps1
+# SentinelStream: auxiliares locales y respaldos de arquitectura
+/update_readme_v12.py
+/docs/images/*_backup_*.png

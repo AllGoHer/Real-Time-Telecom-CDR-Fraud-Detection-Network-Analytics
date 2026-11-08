@@ -40,12 +40,13 @@ La arquitectura separa el procesamiento de eventos en tiempo real, el procesamie
 | Ingesta | Apache Kafka 3.8.0 | Transporte de eventos mediante KRaft |
 | Streaming | Apache Flink 1.18.1 / PyFlink | Procesamiento de eventos y métricas |
 | Bronze | JSON | Conservación de registros originales |
-| Silver | Polars | Limpieza y transformación |
+| Silver | Polars | Limpieza y transformación histórica por lotes |
 | Formato columnar | Apache Parquet | Almacenamiento de datos procesados |
 | Gold | PostgreSQL | Persistencia de métricas |
 | Machine Learning | Python / scikit-learn | Detección experimental de anomalías |
-| Inferencia online | Isolation Forest V11 | Scoring de eventos consumidos desde Kafka |
+| Inferencia online | Isolation Forest V12 | Scoring de eventos consumidos desde Kafka |
 | Experimentos offline | Isolation Forest V11 / V12 | Entrenamiento, calibración y evaluación |
+| Persistencia de predicciones | PostgreSQL | Almacenamiento de resultados de inferencia |
 | Visualización | Grafana 10.4.2 | Monitorización y dashboards |
 | Contenedores | Docker Compose | Entorno local autohospedado |
 
@@ -98,10 +99,12 @@ telecom-cdr-fraud-detection/
 │   │   └── gold_layer.py
 │   ├── inference/
 │   │   ├── consumer_v11.py
+│   │   ├── consumer_v12.py
 │   │   └── ml_predictions_to_postgres.py
 │   ├── polars_jobs/
 │   │   ├── silver_layer.py
 │   │   ├── silver_layer_v4.py
+│   │   └── silver_layer_v5.py
 │   └── producers/
 │       ├── cdr_generator.py
 │       └── requirements.txt
@@ -136,34 +139,33 @@ telecom-cdr-fraud-detection/
 - Procesamiento de streaming con Apache Flink y PyFlink.
 - Conservación de registros en formato JSON.
 
-### Silver - Procesamiento y transformacion
+### Silver - Procesamiento y transformación
 
-El procesamiento historico se realiza mediante Polars sobre los archivos JSON
+El procesamiento histórico se realiza mediante Polars sobre los archivos JSON
 conservados en Bronze. Las salidas se almacenan en formato Apache Parquet.
+Silver es un proceso por lotes que genera snapshots independientes; no es una
+capa de streaming continuo ni alimenta directamente Gold o la inferencia V12.
 
-**Evolucion de las versiones:**
+**Evolución de las versiones:**
 
-- **V3:** version historica inicial del procesamiento Silver.
-- **V4:** incorpora la normalizacion de `is_burst_event` nulo a `false`,
-  conserva las columnas de eventos Burst y genera un archivo independiente:
-  `silver_data_v4.parquet`.
-- V4 procesa los registros Bronze disponibles al momento de su ejecucion.
-  Respecto del snapshot utilizado por V3, incorpora 4,502 registros que
-  llegaron posteriormente a Bronze; no son registros generados artificialmente
-  por la transformacion.
+- **V3:** versión histórica inicial del procesamiento Silver.
+- **V4:** incorpora la normalización de `is_burst_event` nulo a `false`,
+  conserva las columnas de eventos Burst y genera `silver_data_v4.parquet`.
+- **V5:** versión más reciente auditada. Genera `silver_data_v5.parquet`
+  y conserva las transformaciones de clasificación y duración.
 
-**Transformaciones de Silver V4:**
+**Transformaciones implementadas:**
 
-- Validacion de campos obligatorios y duracion no negativa.
-- Deduplicacion por `call_id`.
-- Normalizacion de `is_burst_event` nulo a `false`.
-- Conservacion de `burst_id` y `burst_call_index` para los eventos Burst.
-- Generacion de `duration_minutes`.
-- Clasificacion de duracion: `short`, `medium` y `long`.
-- Identificacion de llamadas internacionales.
-- Escritura del resultado en Apache Parquet mediante Polars.
+- Validación de campos obligatorios y duración no negativa.
+- Deduplicación por `call_id`.
+- Normalización de `is_burst_event` nulo a `false`.
+- Conservación de `burst_id` y `burst_call_index`.
+- Generación de `duration_minutes`.
+- Clasificación de duración: `short`, `medium` y `long`.
+- Identificación de llamadas internacionales.
+- Escritura en Apache Parquet mediante Polars.
 
-**Auditoria del resultado V4:**
+**Auditoría histórica de V4:**
 
 | Indicador | Resultado |
 |---|---:|
@@ -171,21 +173,44 @@ conservados en Bronze. Las salidas se almacenan en formato Apache Parquet.
 | Registros con Burst `false` | 380,710 |
 | Registros con Burst `true` | 167 |
 | Valores nulos en `is_burst_event` | 0 |
-| `call_id` duplicados en Silver | 0 |
+| `call_id` duplicados | 0 |
 | Duraciones negativas | 0 |
-| Registros historicos sin campo Burst normalizados a `false` | 374,602 |
+| Registros históricos sin campo Burst normalizados a `false` | 374,602 |
 
-La auditoria confirmo la conservacion de los 167 eventos Burst disponibles
-en Bronze y la ausencia de duplicados por `call_id` en el resultado Silver.
+Los 374,602 registros históricos que no contenían `is_burst_event` se
+normalizaron a `false`. Esto representa la ausencia del indicador en esos
+registros; no constituye una etiqueta de fraude ni una clasificación confirmada
+de comportamiento normal.
 
-Los 374,602 registros historicos que no contenian el campo
-`is_burst_event` se normalizaron a `false`. Este tratamiento representa
-la ausencia del indicador en los registros historicos, no una etiqueta
-de fraude ni una clasificacion confirmada de comportamiento normal.
+V4 procesó 4,502 registros más que el snapshot utilizado por V3 porque esos
+registros llegaron posteriormente a Bronze.
 
-El procesamiento Silver V4 es un flujo historico por lotes. No alimenta
-directamente al consumer de inferencia online V11, que consume eventos
-desde Kafka de manera independiente.
+**Auditoría de Silver V5:**
+
+| Indicador | Resultado |
+|---|---:|
+| Archivos Bronze leídos | 17,476 |
+| Registros Silver | 383,185 |
+| `call_id` únicos | 383,185 |
+| Valores nulos en `is_burst_event` | 0 |
+| Registros con Burst `false` | 382,942 |
+| Registros con Burst `true` | 243 |
+| Registros `short` | 39,704 |
+| Registros `medium` | 165,185 |
+| Registros `long` | 178,296 |
+| Tamaño del Parquet generado | 9.6 MB |
+
+El archivo generado es `data/silver_data/silver_data_v5.parquet`.
+
+El proceso se ejecuta mediante `src/polars_jobs/silver_layer_v5.py` y es independiente del script `start_sentinelstream.ps1` y del despliegue Docker Compose.
+Sus columnas incluyen `call_id`, `caller`, `callee`, `duration_sec`,
+`country_code`, `timestamp`, `is_suspicious`, `is_burst_event`, `burst_id`,
+`burst_call_index`, `duration_minutes`, `call_type` e `is_international`.
+
+V5 es un snapshot histórico por lotes. No se ejecuta como un flujo continuo,
+no alimenta directamente la tabla Gold y no constituye la entrada del consumer
+online V12. Los indicadores proceden de datos sintéticos y no representan
+evidencia de fraude real.
 
 ### Gold – Métricas y persistencia
 
@@ -196,9 +221,15 @@ desde Kafka de manera independiente.
 
 ## Machine Learning: entrenamiento e inferencia
 
-### V11 – Modelo integrado en inferencia online
+El proyecto conserva los experimentos V11 y V12. V11 es la versión histórica
+de la integración online. V12 es el modelo utilizado actualmente por el
+consumer de inferencia online; su entrenamiento y evaluación se realizan
+offline, de forma independiente del proceso de inferencia.
 
-Se desarrolló un modelo baseline utilizando Isolation Forest de scikit-learn para evaluar la detección de anomalías en registros CDR sintéticos.
+### V11 - Versión histórica
+
+Se desarrolló un baseline con Isolation Forest de scikit-learn para evaluar
+la detección de anomalías en registros CDR sintéticos.
 
 **Configuración:**
 
@@ -215,7 +246,7 @@ Se desarrolló un modelo baseline utilizando Isolation Forest de scikit-learn pa
 - 100 llamantes para calibración.
 - 100 llamantes para prueba.
 
-**Resultados experimentales:**
+**Resultados experimentales históricos:**
 
 | Métrica | Resultado |
 |---|---:|
@@ -230,26 +261,19 @@ Se desarrolló un modelo baseline utilizando Isolation Forest de scikit-learn pa
 | TN | 1,603 |
 | FN | 29 |
 
-También se evaluó una variante ampliada con `is_new_destination_24h`. El baseline obtuvo un F1-score de 0.9441 frente a 0.9318 de la variante ampliada.
+También se evaluó una variante ampliada con `is_new_destination_24h`.
+El baseline obtuvo un F1-score de 0.9441 frente a 0.9318 de la variante
+ampliada.
 
-**Integración online:**
+V11 tuvo una integración online histórica mediante `consumer_v11.py`.
+El tráfico sintético mostró una tasa de alertas elevada, por lo que esa
+integración no se considera validada para detección operativa de fraude.
+V11 se conserva como antecedente técnico y experimental.
 
-El artefacto V11 se exporta mediante `export_baseline_v11.py` y es utilizado por `src/inference/consumer_v11.py`.
+### V12 - Entrenamiento offline y evaluación
 
-El flujo:
-
-1. Consume eventos CDR desde Kafka.
-2. Mantiene variables de comportamiento del llamante.
-3. Calcula el anomaly score.
-4. Compara el score con el umbral configurado.
-5. Publica predicciones en Kafka.
-6. Persiste las predicciones en PostgreSQL mediante `ml_predictions_to_postgres.py`.
-
-**Limitación operativa:** aunque V11 está integrado técnicamente, el tráfico generado mostró una tasa de alertas elevada. Por tanto, no se considera validado para detección operativa de fraude.
-
-### V12 – Experimento offline independiente
-
-V12 amplía el experimento con un conjunto sintético de mayor tamaño y una evaluación independiente por abonado.
+V12 amplía el experimento con un conjunto sintético de mayor tamaño y una
+evaluación independiente por abonado.
 
 **Dataset:**
 
@@ -274,9 +298,10 @@ V12 amplía el experimento con un conjunto sintético de mayor tamaño y una eva
   - `prior_calls_15m`
   - `prior_unique_destinations_24h`
 
-El umbral se seleccionó utilizando el conjunto de calibración mediante F1 máximo, con precisión como criterio de desempate.
+El umbral se seleccionó mediante F1 máximo en el conjunto de calibración,
+con precisión como criterio de desempate.
 
-**Resultados en el conjunto de prueba:**
+**Resultados offline en el conjunto de prueba:**
 
 | Métrica | Resultado |
 |---|---:|
@@ -299,18 +324,61 @@ El umbral se seleccionó utilizando el conjunto de calibración mediante F1 máx
 - `experiments/models/isolation_forest_v12_baseline.joblib`
 - `experiments/models/isolation_forest_v12_baseline.json`
 - `experiments/results/anomaly_evaluation_v12.txt`
-- `experiments/results/anomaly_predictions_v12.parquet` (generado localmente; excluido de Git)
+- `experiments/results/anomaly_predictions_v12.parquet`
+  (generado localmente; excluido de Git).
 
-V12 permanece como experimento offline. No reemplaza al modelo V11, no publica predicciones en Kafka y no modifica la persistencia PostgreSQL del flujo online.
+### V12 - Inferencia online
+
+El modelo V12 se utiliza en el proceso independiente
+`src/inference/consumer_v12.py`.
+
+**Flujo de inferencia:**
+
+1. Consume eventos CDR del topic Kafka `cdr_events`.
+2. Mantiene estado de comportamiento por llamante para calcular variables
+   temporales.
+3. Carga `isolation_forest_v12_baseline.joblib` y sus metadatos.
+4. Calcula el anomaly score y aplica el umbral configurado.
+5. Publica predicciones en `cdr_ml_predictions_v11`.
+6. El proceso independiente `ml_predictions_to_postgres.py` consume esas
+   predicciones y las persiste en `public.fraud_ml_predictions`.
+
+**Detalles de implementación:**
+
+- Kafka accesible desde el host mediante `localhost:9094`.
+- El topic conserva el nombre histórico `cdr_ml_predictions_v11` por
+  compatibilidad; los registros auditados identifican el modelo como
+  `SentinelStream V12 baseline`, versión `V12`.
+- El consumer conserva el identificador histórico de grupo
+  `sentinelstream-v11-inference`.
+- Mantiene estado local mediante SQLite.
+- Implementa una cola de salida (*outbox*) para publicar predicciones
+  pendientes.
+- El sink PostgreSQL es un proceso separado y utiliza el grupo
+  `sentinelstream-ml-postgres-sink`.
+- Las predicciones se almacenan en `public.fraud_ml_predictions`.
+
+La integración online y la persistencia en PostgreSQL fueron verificadas
+mediante registros identificados como V12. Esto confirma el funcionamiento
+técnico observado, pero no demuestra precisión sobre fraude real ni garantiza
+entrega exactamente una vez ante cualquier fallo.
+
+Los resultados offline de V12 y los registros observados durante la inferencia
+online representan contextos distintos y no deben mezclarse.
 
 ### Limitaciones de Machine Learning
 
 - Los registros y las etiquetas utilizados son sintéticos.
-- Los resultados no demuestran rendimiento con fraude real.
-- Los resultados de V11 y V12 corresponden a experimentos diferentes y no deben interpretarse como una comparación directa de modelos sobre un mismo conjunto de prueba.
-- El score de Isolation Forest no representa una probabilidad calibrada de fraude.
-- La inferencia V11 requiere ajustes y validación por su elevada tasa de alertas en tráfico generado.
-- Los modelos y umbrales necesitan validación con datos representativos antes de cualquier uso operativo.
+- Los resultados offline no demuestran rendimiento con fraude real.
+- V11 y V12 corresponden a experimentos diferentes y no son una comparación
+  directa sobre un mismo conjunto de prueba.
+- El score de Isolation Forest no representa una probabilidad calibrada
+  de fraude.
+- Una anomalía detectada no equivale a un fraude confirmado.
+- La integración histórica V11 mostró una tasa elevada de alertas.
+- V12 cuenta con inferencia online integrada, pero requiere validación con
+  datos representativos, calibración y evaluación antes de cualquier uso
+  operativo.
 
 ## Instalación y ejecución
 
@@ -326,15 +394,22 @@ Consulta la documentación para los procedimientos completos:
 
 ## Pruebas
 
-Las pruebas automatizadas del consumer V11 se ejecutan con:
+La suite automatizada disponible corresponde al consumer histórico V11.
+Contiene diez pruebas para escenarios como eventos duplicados, eventos tardíos,
+ventanas temporales, recuperación de estado, fallos de inferencia, outbox,
+mensajes inválidos y tombstones de Kafka.
+
+Ejecución documentada:
 
 ```powershell
-.\.venv-inference\Scripts\python.exe -m pytest -q tests/test_consumer_v11.py
+.\src\inference\venv\Scripts\python.exe -m pytest .\tests\test_consumer_v11.py -v
 ```
 
 Última validación documentada: 10 pruebas aprobadas.
 
-No se deben considerar aprobadas pruebas adicionales sin ejecutarlas y verificar sus resultados.
+Estas pruebas importan `consumer_v11.py`; no constituyen una suite para
+`consumer_v12.py`. No se deben considerar aprobadas pruebas adicionales
+sin ejecutarlas y verificar sus resultados.
 
 ## Objetivos técnicos del proyecto
 
@@ -352,11 +427,24 @@ SentinelStream permite demostrar experiencia práctica en:
 
 ## Estado y alcance
 
-SentinelStream es un proyecto de portafolio orientado a ingeniería de datos, procesamiento de eventos y experimentación con detección de anomalías.
+SentinelStream es un proyecto de portafolio orientado a ingeniería de datos,
+procesamiento de eventos en tiempo real y experimentación con detección de
+anomalías.
 
-La arquitectura implementa un flujo Kafka/Flink y una ruta de inferencia online V11, junto con experimentos offline V11 y V12. Los resultados de Machine Learning se obtuvieron con datos sintéticos y no constituyen evidencia de detección efectiva de fraude real.
+La arquitectura integra generación de CDR sintéticos, Kafka en modo KRaft,
+procesamiento de streaming con Flink, almacenamiento Bronze, procesamiento
+histórico Silver con Polars, métricas Gold en PostgreSQL y monitorización
+mediante Grafana.
 
-El proyecto continúa sujeto a mejoras de validación, calibración y evaluación con datos representativos.
+La inferencia online utiliza Isolation Forest V12 mediante un consumer Kafka
+independiente y un sink separado para persistir predicciones en PostgreSQL.
+V11 se conserva como versión histórica. Silver V5 representa un procesamiento
+histórico por lotes y no alimenta directamente la inferencia online ni Gold.
+
+Los resultados de Machine Learning se obtuvieron con datos sintéticos.
+Las anomalías identificadas no constituyen evidencia de fraude real. El
+proyecto continúa sujeto a mejoras de validación, calibración y evaluación
+con datos representativos.
 
 ## Licencia
 

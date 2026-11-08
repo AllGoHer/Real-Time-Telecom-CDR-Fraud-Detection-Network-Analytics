@@ -62,27 +62,21 @@ Antes de iniciar el entorno:
 
 ### 4.3. Inicio automatizado de SentinelStream
 
-El repositorio incluye `scripts/start_sentinelstream.ps1`, que coordina las siguientes operaciones:
+El repositorio incluye `scripts/start_sentinelstream.ps1`, que comprueba y recupera el entorno de SentinelStream.
 
-1. Inicia los servicios definidos en Docker Compose mediante `docker compose up -d`.
-2. Intenta comprobar la disponibilidad de Flink durante un máximo aproximado de 60 segundos.
-3. Consulta los trabajos Flink activos e intenta iniciar Bronze, Fraud Alerts y Gold cuando no encuentra sus nombres en la lista de trabajos en ejecución.
-4. Busca procesos de Windows cuya línea de comandos contenga `cdr_generator.py`.
-5. Si no encuentra ninguno, inicia el generador utilizando `.venv-producer`.
+El script:
 
-**Consideraciones:**
+1. Comprueba la disponibilidad de Docker.
+2. Inicia los contenedores requeridos que estén detenidos, sin recrearlos.
+3. Verifica la disponibilidad de Kafka, PostgreSQL y Flink.
+4. Comprueba los jobs Bronze, Fraud Alerts y Gold, e inicia los que falten.
+5. Comprueba el generador CDR y lo inicia si no está activo.
+6. Comprueba el consumidor ML V12 y el sink PostgreSQL, e inicia los que falten.
 
-- La comprobación de disponibilidad se realiza sobre Flink; no garantiza que Kafka y PostgreSQL estén listos.
-- La detección del generador se basa en el nombre del archivo y no verifica que el proceso pertenezca necesariamente a esta instancia del proyecto.
-- El inicio del generador no confirma que haya establecido correctamente la conexión con Kafka.
-- `docker compose up -d` puede crear o recrear contenedores según el estado y la configuración del entorno.
-- El script puede enviar trabajos a Flink y producir nuevos eventos CDR sintéticos.
-
-
-Importante: este comando inicia contenedores, puede enviar trabajos a Flink y puede arrancar el generador de CDR. No es un comando de comprobación. Ejecútalo únicamente después de revisar la configuración y confirmar que deseas iniciar el entorno.
+**Comprobación sin iniciar ni detener procesos:**
 
 ```powershell
-.\scripts\start_sentinelstream.ps1
+.\scripts\start_sentinelstream.ps1 -CheckOnly
 ```
 
 ## 5. Verificar los servicios
@@ -127,17 +121,24 @@ El generador se ejecuta en el equipo anfitrión mediante Python y utiliza `local
 
 ## 7. Capas de datos
 
-- **Bronze:** registros JSON sin procesar.
+- **Bronze:** registros JSON sin procesar, conservados a partir de la ingesta de eventos mediante Flink.
+- **Silver V5:** snapshot histórico por lotes procesado con Polars y almacenado en Apache Parquet.
+- **Gold:** métricas calculadas mediante Flink y persistidas en PostgreSQL.
 
-- **Silver:** datos transformados con Polars y almacenados en Parquet.
+### 7.1. Silver V5: procesamiento histórico
 
-- **Gold:** métricas disponibles en PostgreSQL.
+El proceso más reciente auditado se encuentra en `src/polars_jobs/silver_layer_v5.py`.
 
-El procesamiento Silver con Polars es una operación histórica independiente. No se ejecuta como una etapa continua dentro de los trabajos Flink.
+- **Entrada:** archivos JSON históricos conservados en `data/bronze_data/`.
+- **Procesamiento:** lectura, validación, limpieza, deduplicación y enriquecimiento mediante Polars.
+- **Salida:** `data/silver_data/silver_data_v5.parquet`.
+- **Modalidad:** ejecución batch que genera un snapshot; no es un flujo continuo.
 
-Antes de ejecutar un trabajo que escriba datos, revisa sus rutas de salida y el modo de escritura. Algunos trabajos pueden reemplazar archivos existentes.
+Silver V5 es independiente de los trabajos Flink. No alimenta directamente las métricas Gold ni el consumer de inferencia online V12. La ejecución automatizada de `scripts/start_sentinelstream.ps1` no debe interpretarse como ejecución de este proceso batch.
 
-No ejecutes procesos de transformación sobre datos existentes sin confirmar previamente qué archivos o tablas modificarán.
+Las versiones anteriores (`silver_layer.py` y `silver_layer_v4.py`) se conservan como parte de la evolución histórica del proyecto.
+
+Antes de ejecutar un proceso que escriba datos, revisa sus rutas de salida y el modo de escritura. Algunos procesos pueden reemplazar archivos existentes. No ejecutes transformaciones sobre datos existentes sin confirmar previamente qué archivos o tablas modificarán.
 
 ## 8. Grafana
 
@@ -147,58 +148,77 @@ No incluyas contraseñas ni secretos en capturas, documentación pública o repo
 
 La instancia de Grafana utiliza el puerto 3000 cuando está publicado según la configuración actual de Docker Compose.
 
-## 9. Machine Learning: inferencia online V11 y experimento offline V12
+## 9. Machine Learning: inferencia online V12 y evaluación offline
 
-SentinelStream mantiene dos flujos de Machine Learning independientes. V11 corresponde a la inferencia online conectada a Kafka. V12 es un experimento offline y no está integrado en el consumidor online.
+SentinelStream utiliza Isolation Forest V12 como versión activa para la inferencia online. El entrenamiento y la evaluación offline son procesos independientes.
 
-### 9.1. Inferencia online V11
+### 9.1. Inferencia online V12
 
-1. `consumer_v11.py` consume eventos del tópico Kafka `cdr_events`.
-2. Ejecuta inferencia con `experiments/models/isolation_forest_v11_baseline.joblib`.
-3. Publica predicciones en `cdr_ml_predictions_v11`.
-4. `ml_predictions_to_postgres.py` almacena las predicciones en `public.fraud_ml_predictions`.
+La inferencia online está formada por dos procesos Python separados. `scripts/start_sentinelstream.ps1` comprueba su estado y recupera los procesos que no están activos. Docker Compose no inicia estos procesos Python.
 
-**Requisitos:** Kafka y PostgreSQL activos, generador CDR en ejecución, modelo y metadatos V11 disponibles, entorno `src/inference/venv` instalado y `.env` configurado.
+- Consume eventos desde Kafka, tópico `cdr_events`.
+- Carga el modelo Isolation Forest V12 y sus metadatos.
+- Mantiene características de comportamiento de los llamantes mediante SQLite.
+- Calcula puntuaciones de anomalía y publica predicciones en `cdr_ml_predictions_v11`.
+- Utiliza el grupo `sentinelstream-v11-inference`.
+- Se conecta a Kafka mediante `localhost:9094`.
 
-**Ejecución:** abre dos terminales PowerShell desde la raíz del proyecto.
+El tópico y el grupo conservan nombres históricos de V11 por compatibilidad. Esto no significa que V11 sea la versión activa.
 
-Terminal 1: persistencia en PostgreSQL.
+### 9.2. Persistencia de predicciones en PostgreSQL
+
+Archivo: `src/inference/ml_predictions_to_postgres.py`
+
+- Consume el tópico `cdr_ml_predictions_v11`.
+- Utiliza el grupo `sentinelstream-ml-postgres-sink`.
+- Persiste las predicciones en `public.fraud_ml_predictions`.
+- Obtiene las credenciales de PostgreSQL desde `.env`.
+- Se conecta a PostgreSQL en `localhost:5433`.
+
+Este proceso es independiente del consumidor V12. Si no está iniciado, las predicciones no se incorporarán a PostgreSQL hasta que el sink las consuma.
+
+### 9.3. Comprobación y recuperación de los procesos online
+
+Los procesos de inferencia V12 y persistencia en PostgreSQL son gestionados
+por `scripts/start_sentinelstream.ps1`.
+
+**Comprobar el estado sin iniciar ni detener procesos:**
 
 ```powershell
-.\src\inference\venv\Scripts\python.exe .\src\inference\ml_predictions_to_postgres.py
+.\scripts\start_sentinelstream.ps1 -CheckOnly
 ```
 
-Terminal 2: inferencia V11.
+### 9.4. Entrenamiento y evaluación offline V12
 
-```powershell
-.\src\inference\venv\Scripts\python.exe .\src\inference\consumer_v11.py
-```
+Los procesos offline son independientes de la inferencia online:
 
-Mantén ambos procesos activos. Para detenerlos utiliza `Ctrl + C` en cada terminal. No inicies instancias duplicadas del consumidor sin revisar el grupo Kafka y su estado SQLite.
+- Entrenamiento: `experiments/train_anomaly_v12.py`.
+- Evaluación: `experiments/evaluate_v12_production.py`.
+- Modelo: `experiments/models/isolation_forest_v12_baseline.joblib`.
+- Metadatos: `experiments/models/isolation_forest_v12_baseline.json`.
 
-Conserva `src/inference/state_v11.sqlite3` y sus archivos auxiliares `-shm` y `-wal`.
+El entrenamiento y la evaluación utilizan datos sintéticos. Sus resultados permiten evaluar el funcionamiento técnico, pero no demuestran precisión frente a fraude real.
 
-**Verificación de predicciones almacenadas:**
+### 9.5. V11 como referencia histórica
 
-```powershell
-docker exec postgres-fraud psql -U fraud_user -d fraud_detection -c "SELECT COUNT(*) AS total_predicciones FROM public.fraud_ml_predictions;"
-```
+V11 se conserva como versión histórica. V12 es la versión activa de inferencia online.
 
-### 9.2. Experimento offline V12
+Se mantienen identificadores heredados por compatibilidad:
 
-V12 es un experimento independiente de entrenamiento y evaluación con datos sintéticos. No sustituye al consumidor V11 ni está conectado al flujo online de Kafka.
+- Tópico: `cdr_ml_predictions_v11`.
+- Grupo del consumidor: `sentinelstream-v11-inference`.
+- Estado SQLite: `src/inference/state_v11.sqlite3`.
 
-Sus métricas representan resultados experimentales sobre datos sintéticos; no deben interpretarse como una tasa de detección de fraude real ni como evidencia de rendimiento en producción.
+No renombrar estos identificadores sin planificar una migración coordinada.
 
-Antes de volver a ejecutar experimentos, revisa los archivos de salida para evitar sobrescribir resultados existentes.
+### 9.6. Alcance y limitaciones
 
-### 9.3. Alcance y limitaciones
+- Isolation Forest identifica patrones anómalos; una anomalía no confirma un fraude.
+- La puntuación de anomalía no es una probabilidad calibrada de fraude.
+- Las etiquetas y los datos sintéticos no sustituyen datos reales verificados.
+- No se dispone de etiquetas verificadas de fraude real para afirmar precisión operativa.
+- Se requiere validación con datos representativos antes de utilizar el modelo en decisiones reales.
 
-- V11 está implementado como flujo de inferencia online, pero sus resultados son experimentales y dependen de la distribución de los eventos generados.
-- V12 corresponde exclusivamente a evaluación offline.
-- Los datos utilizados en las pruebas son sintéticos.
-- Una predicción o puntuación del modelo no equivale por sí misma a fraude confirmado.
-- El sistema no debe presentarse como validado con tráfico real de una operadora.
 
 ## 10. Detención y protección de datos
 
